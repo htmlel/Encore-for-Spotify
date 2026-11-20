@@ -94,6 +94,92 @@ function resizeAndQuantize(srcPixels, srcW, srcH, dstW, dstH) {
   return dst;
 }
 
+// --- The Time 2's cover, at the best quality its 64 colors allow -------------
+
+// Shrinks the picture to dstW x dstH (filling it, cropping the overhang) by
+// averaging every source pixel that falls inside each new pixel, so no
+// detail is skipped over. Returns red, green, blue for each pixel, 0..255.
+function resizeSmooth(srcPixels, srcW, srcH, dstW, dstH) {
+  var out = new Float32Array(dstW * dstH * 3);
+  var scale = Math.max(dstW / srcW, dstH / srcH);
+  var offsetX = (srcW - dstW / scale) / 2, offsetY = (srcH - dstH / scale) / 2;
+  var step = 1 / scale;  // source pixels per new pixel
+  for (var y = 0; y < dstH; y++) {
+    var y0 = offsetY + y * step, y1 = y0 + step;
+    var sy0 = Math.max(0, Math.floor(y0)), sy1 = Math.min(srcH, Math.ceil(y1));
+    for (var x = 0; x < dstW; x++) {
+      var x0 = offsetX + x * step, x1 = x0 + step;
+      var sx0 = Math.max(0, Math.floor(x0)), sx1 = Math.min(srcW, Math.ceil(x1));
+      var r = 0, g = 0, b = 0, weight = 0;
+      for (var sy = sy0; sy < sy1; sy++) {
+        // How much of this source row and column lies inside the new pixel.
+        var wy = Math.min(sy + 1, y1) - Math.max(sy, y0);
+        for (var sx = sx0; sx < sx1; sx++) {
+          var w = wy * (Math.min(sx + 1, x1) - Math.max(sx, x0));
+          var i = (sy * srcW + sx) * 4;
+          r += srcPixels[i] * w; g += srcPixels[i + 1] * w; b += srcPixels[i + 2] * w;
+          weight += w;
+        }
+      }
+      var o = (y * dstW + x) * 3;
+      if (weight > 0) { out[o] = r / weight; out[o + 1] = g / weight; out[o + 2] = b / weight; }
+    }
+  }
+  return out;
+}
+
+// Each channel has four levels on the watch: 0, 85, 170, 255.
+function nearestLevel(v) {
+  var level = Math.round(v / 85);
+  return level < 0 ? 0 : level > 3 ? 3 : level;
+}
+
+// To the watch's colors, each pixel to its nearest. Plain areas stay plain,
+// which packs small: used for the quick preview.
+function quantizeNearest(rgb, w, h) {
+  var dst = new Uint8Array(w * h);
+  for (var i = 0; i < w * h; i++) {
+    dst[i] = 0xC0 | (nearestLevel(rgb[i * 3]) << 4) | (nearestLevel(rgb[i * 3 + 1]) << 2) |
+      nearestLevel(rgb[i * 3 + 2]);
+  }
+  return dst;
+}
+
+// To the watch's colors with the rounding error of each pixel handed on to
+// its neighbors (Floyd-Steinberg, back and forth on alternate rows), so
+// shades between the watch's 64 colors come out as a fine mix of the two
+// nearest: skin, skies and soft gradients keep their shape and do not break
+// into bands. Used for the full cover.
+function quantizeDithered(rgb, w, h) {
+  var dst = new Uint8Array(w * h);
+  var buf = new Float32Array(rgb);  // a copy; errors are added into it
+  for (var y = 0; y < h; y++) {
+    var leftToRight = (y % 2) === 0;
+    var dir = leftToRight ? 1 : -1;
+    for (var n = 0; n < w; n++) {
+      var x = leftToRight ? n : w - 1 - n;
+      var o = (y * w + x) * 3;
+      var px = 0xC0;
+      for (var c = 0; c < 3; c++) {
+        var want = buf[o + c];
+        var level = nearestLevel(want);
+        var err = want - level * 85;
+        px |= level << (4 - 2 * c);
+        var ahead = x + dir, behind = x - dir;
+        if (ahead >= 0 && ahead < w) buf[o + dir * 3 + c] += err * 7 / 16;
+        if (y + 1 < h) {
+          var below = o + w * 3;
+          buf[below + c] += err * 5 / 16;
+          if (behind >= 0 && behind < w) buf[below - dir * 3 + c] += err * 3 / 16;
+          if (ahead >= 0 && ahead < w) buf[below + dir * 3 + c] += err * 1 / 16;
+        }
+      }
+      dst[y * w + x] = px;
+    }
+  }
+  return dst;
+}
+
 function resizeAndDither(srcPixels, srcW, srcH, dstW, dstH) {
   var gray = new Float32Array(dstW * dstH);
   var scale = Math.max(dstW / srcW, dstH / srcH);
@@ -185,13 +271,16 @@ function processJpeg(jpegData, slot) {
     } catch (e) { }
 
     var imageData = isRound ? resizeAndQuantizeFit(raw.data, raw.width, raw.height, W, H)
-      : isColorPlatform() ? resizeAndQuantize(raw.data, raw.width, raw.height, W, H)
-        : resizeAndDither(raw.data, raw.width, raw.height, W, H);
+      : platform === 'emery' ? quantizeDithered(resizeSmooth(raw.data, raw.width, raw.height, W, H), W, H)
+        : isColorPlatform() ? resizeAndQuantize(raw.data, raw.width, raw.height, W, H)
+          : resizeAndDither(raw.data, raw.width, raw.height, W, H);
 
     // Only worth it for a cover bigger than the preview itself.
     if (slot === 0 && platform === 'emery' && W > PREVIEW_SIZE) {
       // The preview first; the full cover follows unless a newer song cut in.
-      var preview = resizeAndQuantize(raw.data, raw.width, raw.height, PREVIEW_SIZE, PREVIEW_SIZE);
+      var preview = quantizeNearest(
+        resizeSmooth(raw.data, raw.width, raw.height, PREVIEW_SIZE, PREVIEW_SIZE),
+        PREVIEW_SIZE, PREVIEW_SIZE);
       var url = lastUrl;
       afterSlot0 = function () {
         if (lastUrl !== url) return;
