@@ -22,12 +22,12 @@ void ui_set_repeat(int state);
 // later natural track change.
 void ui_hint_animation_dir(bool reverse);
 
-// The record-player screen (Pebble Time 2) also wants to know whether music
-// is playing, when something it shows has changed, and what a tap landed on.
-// On other watches these do nothing.
+// The Pebble Time 2's screen also wants to know whether music is playing,
+// when something it shows has changed, and what a tap landed on. On other
+// watches these do nothing.
 typedef enum {
   UI_HIT_NONE,
-  UI_HIT_RECORD,
+  UI_HIT_RECORD,   // the cover
   UI_HIT_HEART,
   UI_HIT_PREV,
   UI_HIT_PLAY_PAUSE,

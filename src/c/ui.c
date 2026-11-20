@@ -1,6 +1,6 @@
 #include "ui.h"
 
-#if !defined(PBL_PLATFORM_EMERY)  // the Time 2 uses ui_record.c instead
+#if !defined(PBL_PLATFORM_EMERY)  // the Time 2 uses ui_time2.c instead
 #include "comm.h"
 #include "marquee.h"
 

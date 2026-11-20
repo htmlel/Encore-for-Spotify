@@ -1,10 +1,9 @@
-// Now Playing for the Pebble Time 2: a record player.
+// Now Playing for the Pebble Time 2.
 //
-// The album cover is the record's label and turns while the music plays; the
-// tonearm sits on the record when playing and rests beside it when paused.
-// Under the record: title, artist, the device the music is on, a progress bar
-// with time gone and time left, and touch buttons. A heart shows whether the
-// song is in Liked Songs.
+// The album cover up top, on a background tinted with the cover's own color.
+// Under it: title, artist, the device the music is on, a progress bar with
+// time gone and time left, and touch buttons. A heart beside the cover shows
+// whether the song is in Liked Songs.
 //
 // This file replaces ui.c on the Time 2 (ui.c is the original screen, still
 // used for the other watches if the app is ever built for them).
@@ -16,12 +15,9 @@
 
 #if defined(PBL_PLATFORM_EMERY)
 
-#define RECORD_CX 100
-#define RECORD_CY 66
-#define RECORD_R 62
-#define LABEL_R 42          // the cover arrives 84x84; its inscribed circle is the label
-#define SPIN_FRAME_MS 66    // about 15 frames a second
-#define SPIN_TURN_MS 1800   // one turn, 33 1/3 rpm
+#define COVER_SIZE 124      // the cover arrives as a square this size
+#define COVER_X 38
+#define COVER_Y 3
 
 #define TITLE_Y 126
 #define ARTIST_Y 153
@@ -32,8 +28,6 @@
 
 static Layer *s_canvas;
 static MarqueeLayer *s_title_layer;
-static AppTimer *s_spin_timer;
-static int32_t s_angle;
 
 static GBitmap *s_art;          // owned by comm.c
 static GColor s_bg = {GColorOxfordBlueARGB8};
@@ -78,89 +72,48 @@ static GColor background_for(GBitmap *bmp) {
   if (cg > 2) cg = 2;
   if (cb > 2) cb = 2;
   if (cr + cg + cb == 0) {
-    return GColorDarkGray;   // a black cover: the black record needs a backdrop
+    return GColorDarkGray;   // a black cover still gets a backdrop to sit on
   }
   return (GColor){.argb = (uint8_t)(0xC0 | (cr << 4) | (cg << 2) | cb)};
 }
 
 // --- Drawing ----------------------------------------------------------------
 
-static void draw_record(GContext *ctx) {
-  const GPoint c = GPoint(RECORD_CX, RECORD_CY);
-
-  // The label: the cover, turned, or a plain label when there is no cover.
+static void draw_cover(GContext *ctx) {
+  const GRect frame = GRect(COVER_X, COVER_Y, COVER_SIZE, COVER_SIZE);
+  // A black edge lifts the cover off the background.
+  graphics_context_set_fill_color(ctx, GColorBlack);
+  graphics_fill_rect(ctx, grect_inset(frame, GEdgeInsets(-2)), 0, GCornerNone);
   if (s_art) {
     const GRect b = gbitmap_get_bounds(s_art);
+    // Centered, in case a cover of another size is still on its way out.
+    const GRect dest = GRect(frame.origin.x + (frame.size.w - b.size.w) / 2,
+                             frame.origin.y + (frame.size.h - b.size.h) / 2, b.size.w, b.size.h);
     graphics_context_set_compositing_mode(ctx, GCompOpAssign);
-    graphics_draw_rotated_bitmap(ctx, s_art, GPoint(b.size.w / 2, b.size.h / 2), s_angle, c);
-  } else {
-    graphics_context_set_fill_color(ctx, GColorChromeYellow);
-    graphics_fill_circle(ctx, c, LABEL_R);
-    // A mark on the plain label, so its turning shows.
-    graphics_context_set_stroke_color(ctx, GColorBlack);
-    graphics_context_set_stroke_width(ctx, 3);
-    graphics_draw_line(ctx,
-                       GPoint(c.x + sin_lookup(s_angle) * 14 / TRIG_MAX_RATIO,
-                              c.y - cos_lookup(s_angle) * 14 / TRIG_MAX_RATIO),
-                       GPoint(c.x + sin_lookup(s_angle) * 34 / TRIG_MAX_RATIO,
-                              c.y - cos_lookup(s_angle) * 34 / TRIG_MAX_RATIO));
+    graphics_draw_bitmap_in_rect(ctx, s_art, grect_crop(dest, 0));
+    return;
   }
-
-  // The vinyl: a black ring that also hides the corners of the turned cover.
-  graphics_context_set_fill_color(ctx, GColorBlack);
-  graphics_fill_radial(ctx, GRect(c.x - RECORD_R, c.y - RECORD_R, RECORD_R * 2, RECORD_R * 2),
-                       GOvalScaleModeFitCircle, RECORD_R - LABEL_R, 0, TRIG_MAX_ANGLE);
-
-  // Grooves, and two glints that turn with the record.
-  graphics_context_set_stroke_width(ctx, 1);
-  graphics_context_set_stroke_color(ctx, GColorDarkGray);
-  for (int r = LABEL_R + 5; r < RECORD_R - 2; r += 5) {
-    graphics_draw_circle(ctx, c, r);
-  }
-  graphics_context_set_stroke_color(ctx, GColorLightGray);
-  for (int k = 0; k < 2; k++) {
-    const int32_t a = s_angle + k * (TRIG_MAX_ANGLE / 2);
-    graphics_draw_arc(ctx, GRect(c.x - RECORD_R + 6, c.y - RECORD_R + 6,
-                                 (RECORD_R - 6) * 2, (RECORD_R - 6) * 2),
-                      GOvalScaleModeFitCircle, a, a + TRIG_MAX_ANGLE / 14);
-  }
-
-  // The spindle.
-  graphics_context_set_fill_color(ctx, GColorBlack);
-  graphics_fill_circle(ctx, c, 4);
+  // No cover yet: a plain sleeve with a note on it.
+  graphics_context_set_fill_color(ctx, GColorDarkGray);
+  graphics_fill_rect(ctx, frame, 0, GCornerNone);
+  const int cx = frame.origin.x + frame.size.w / 2;
+  const int cy = frame.origin.y + frame.size.h / 2;
   graphics_context_set_fill_color(ctx, GColorLightGray);
-  graphics_fill_circle(ctx, c, 2);
-}
-
-static void draw_tonearm(GContext *ctx) {
-  // Pivot in the top right corner; the head sits on the record when playing
-  // and swings out to rest beside it when paused.
-  const GPoint pivot = GPoint(186, 14);
-  const GPoint head = s_playing ? GPoint(148, 78) : GPoint(186, 92);
-  graphics_context_set_stroke_color(ctx, GColorBlack);
-  graphics_context_set_stroke_width(ctx, 6);
-  graphics_draw_line(ctx, pivot, head);
-  graphics_context_set_stroke_color(ctx, GColorLightGray);
-  graphics_context_set_stroke_width(ctx, 4);
-  graphics_draw_line(ctx, pivot, head);
-  graphics_context_set_fill_color(ctx, GColorBlack);
-  graphics_fill_circle(ctx, pivot, 9);
-  graphics_context_set_fill_color(ctx, GColorLightGray);
-  graphics_fill_circle(ctx, pivot, 6);
-  graphics_context_set_fill_color(ctx, GColorWhite);
-  graphics_fill_circle(ctx, head, 5);
-  graphics_context_set_fill_color(ctx, GColorBlack);
-  graphics_fill_circle(ctx, head, 2);
+  graphics_fill_circle(ctx, GPoint(cx - 8, cy + 16), 10);
+  graphics_fill_rect(ctx, GRect(cx - 2, cy - 26, 5, 44), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(cx - 2, cy - 26, 22, 8), 0, GCornerNone);
 }
 
 // A heart from two circles and a triangle, centered on (cx, cy).
 static void draw_heart_shape(GContext *ctx, int cx, int cy, int grow) {
-  const int r = 6 + grow;
-  graphics_fill_circle(ctx, GPoint(cx - 6, cy - 3), r);
-  graphics_fill_circle(ctx, GPoint(cx + 6, cy - 3), r);
+  const int r = 5 + grow;
+  graphics_fill_circle(ctx, GPoint(cx - 5, cy - 3), r);
+  graphics_fill_circle(ctx, GPoint(cx + 5, cy - 3), r);
+  // Close the gap the two circles leave between them.
+  graphics_fill_rect(ctx, GRect(cx - 3, cy - 4, 7, 6), 0, GCornerNone);
   GPathInfo info = {
       .num_points = 3,
-      .points = (GPoint[]){{-12 - grow, 0}, {12 + grow, 0}, {0, 13 + grow}},
+      .points = (GPoint[]){{-10 - grow, 0}, {10 + grow, 0}, {0, 11 + grow}},
   };
   GPath *path = gpath_create(&info);
   if (path) {
@@ -171,8 +124,8 @@ static void draw_heart_shape(GContext *ctx, int cx, int cy, int grow) {
 }
 
 static void draw_heart(GContext *ctx) {
-  const int cx = 20;
-  const int cy = 110;
+  const int cx = 18;
+  const int cy = 108;
   const bool liked = comm_get_liked() == 1;
   // An outline: the shape a size up in white, then the middle filled in red
   // when liked or with the background when not.
@@ -182,21 +135,21 @@ static void draw_heart(GContext *ctx) {
   draw_heart_shape(ctx, cx, cy, 0);
 }
 
-static void draw_modes(GContext *ctx) {
-  // Shuffle and repeat, bottom right of the record, only when they are on.
+static void draw_side_labels(GContext *ctx) {
   GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
   graphics_context_set_text_color(ctx, GColorWhite);
-  char buf[12] = "";
+  // The time, in the strip left of the cover.
+  graphics_draw_text(ctx, s_clock, font, GRect(0, 0, COVER_X - 2, 18), GTextOverflowModeFill,
+                     GTextAlignmentCenter, NULL);
+  // Shuffle and repeat, in the strip on the right, only when they are on.
+  const GRect right = GRect(COVER_X + COVER_SIZE + 2, 0, 200 - COVER_X - COVER_SIZE - 2, 18);
   if (s_shuffle) {
-    strcat(buf, "SHUF");
+    graphics_draw_text(ctx, "SHUF", font, right, GTextOverflowModeFill, GTextAlignmentCenter, NULL);
   }
   if (s_repeat) {
-    strcat(buf, buf[0] ? "\n" : "");
-    strcat(buf, s_repeat == 2 ? "RPT 1" : "RPT");
-  }
-  if (buf[0]) {
-    graphics_draw_text(ctx, buf, font, GRect(150, 96, 46, 32), GTextOverflowModeWordWrap,
-                       GTextAlignmentRight, NULL);
+    graphics_draw_text(ctx, s_repeat == 2 ? "RPT1" : "RPT", font,
+                       GRect(right.origin.x, 18, right.size.w, 18), GTextOverflowModeFill,
+                       GTextAlignmentCenter, NULL);
   }
 }
 
@@ -209,9 +162,6 @@ static void format_time(char *out, size_t size, int32_t sec, bool minus) {
 
 static void draw_text_and_progress(GContext *ctx) {
   graphics_context_set_text_color(ctx, GColorWhite);
-  graphics_draw_text(ctx, s_clock, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                     GRect(6, -2, 60, 22), GTextOverflowModeFill, GTextAlignmentLeft, NULL);
-
   graphics_draw_text(ctx, s_artist, fonts_get_system_font(FONT_KEY_GOTHIC_18),
                      GRect(8, ARTIST_Y, 184, 22), GTextOverflowModeTrailingEllipsis,
                      GTextAlignmentCenter, NULL);
@@ -286,35 +236,11 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   graphics_context_set_antialiased(ctx, true);
   graphics_context_set_fill_color(ctx, s_bg);
   graphics_fill_rect(ctx, layer_get_bounds(layer), 0, GCornerNone);
-  draw_record(ctx);
-  draw_tonearm(ctx);
+  draw_cover(ctx);
   draw_heart(ctx);
-  draw_modes(ctx);
+  draw_side_labels(ctx);
   draw_text_and_progress(ctx);
   draw_buttons(ctx);
-}
-
-// --- Spinning ---------------------------------------------------------------
-
-static void spin_step(void *data) {
-  s_spin_timer = NULL;
-  if (!s_canvas || !s_playing) {
-    return;
-  }
-  s_angle = (s_angle + TRIG_MAX_ANGLE * SPIN_FRAME_MS / SPIN_TURN_MS) % TRIG_MAX_ANGLE;
-  layer_mark_dirty(s_canvas);
-  s_spin_timer = app_timer_register(SPIN_FRAME_MS, spin_step, NULL);
-}
-
-static void update_spin(void) {
-  if (s_canvas && s_playing) {
-    if (!s_spin_timer) {
-      s_spin_timer = app_timer_register(SPIN_FRAME_MS, spin_step, NULL);
-    }
-  } else if (s_spin_timer) {
-    app_timer_cancel(s_spin_timer);
-    s_spin_timer = NULL;
-  }
 }
 
 static void redraw(void) {
@@ -327,6 +253,10 @@ static void redraw(void) {
 
 static void set_clock(struct tm *t) {
   strftime(s_clock, sizeof(s_clock), clock_is_24h_style() ? "%H:%M" : "%l:%M", t);
+  // "%l" pads single-digit hours with a space; drop it so the time centers.
+  if (s_clock[0] == ' ') {
+    memmove(s_clock, s_clock + 1, strlen(s_clock));
+  }
 }
 
 static void clock_tick(struct tm *t, TimeUnits changed) {
@@ -359,15 +289,10 @@ void ui_init(Window *window) {
   time_t now = time(NULL);
   set_clock(localtime(&now));
   tick_timer_service_subscribe(MINUTE_UNIT, clock_tick);
-  update_spin();
 }
 
 void ui_deinit(void) {
   tick_timer_service_unsubscribe();
-  if (s_spin_timer) {
-    app_timer_cancel(s_spin_timer);
-    s_spin_timer = NULL;
-  }
   if (s_title_layer) {
     marquee_layer_destroy(s_title_layer);
     s_title_layer = NULL;
@@ -380,7 +305,7 @@ void ui_deinit(void) {
 }
 
 void ui_start_loading(void) {
-  // Whatever is known shows at once; the record waits for the first report.
+  // Whatever is known shows at once; the cover arrives with the first report.
 }
 
 void ui_set_album_art(GBitmap *bitmap) {
@@ -417,10 +342,7 @@ void ui_set_track_info(const char *title, const char *artist) {
 void ui_set_progress(int elapsed_sec, int total_sec) {
   s_elapsed = elapsed_sec;
   s_total = total_sec;
-  // While the record turns it repaints many times a second anyway.
-  if (!s_spin_timer) {
-    redraw();
-  }
+  redraw();
 }
 
 void ui_set_shuffle(bool on) {
@@ -434,12 +356,11 @@ void ui_set_repeat(int state) {
 }
 
 void ui_hint_animation_dir(bool reverse) {
-  (void)reverse;  // the record has no slide-in animation
+  (void)reverse;  // this screen has no slide-in animation
 }
 
 void ui_set_playing(bool playing) {
   s_playing = playing;
-  update_spin();
   redraw();
 }
 
@@ -452,9 +373,10 @@ UiHit ui_hit(GPoint p) {
     return p.x < 67 ? UI_HIT_PREV : p.x < 134 ? UI_HIT_PLAY_PAUSE : UI_HIT_NEXT;
   }
   // The heart, with room around it for a fingertip.
-  if (p.x < 50 && p.y >= 86 && p.y < 134) {
+  if (p.x < COVER_X + 6 && p.y >= 82 && p.y < 132) {
     return UI_HIT_HEART;
   }
+  // The cover itself plays and pauses.
   if (p.y < TITLE_Y) {
     return UI_HIT_RECORD;
   }

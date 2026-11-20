@@ -276,7 +276,7 @@ static void np_gesture(GestureKind kind, void *ctx) {
           np_down_click(NULL, NULL);
           break;
         case UI_HIT_PLAY_PAUSE:
-        case UI_HIT_RECORD:
+        case UI_HIT_RECORD:  // the cover
           // Shown at once; the next report from Spotify confirms it.
           s_playing = !s_playing;
           ui_set_playing(s_playing);
@@ -399,22 +399,22 @@ static GBitmap *s_demo_art;
 static void demo_now_playing(void) {
   window_stack_pop_all(false);
   // A cover drawn here: a sunset over the sea.
-  s_demo_art = gbitmap_create_blank(GSize(84, 84), GBitmapFormat8Bit);
+  s_demo_art = gbitmap_create_blank(GSize(124, 124), GBitmapFormat8Bit);
   if (s_demo_art) {
     uint8_t *data = gbitmap_get_data(s_demo_art);
     const int stride = gbitmap_get_bytes_per_row(s_demo_art);
-    for (int y = 0; y < 84; y++) {
-      for (int x = 0; x < 84; x++) {
-        const int dx = x - 42;
-        const int dy = y - 40;
+    for (int y = 0; y < 124; y++) {
+      for (int x = 0; x < 124; x++) {
+        const int dx = x - 62;
+        const int dy = y - 62;
         uint8_t px;
-        if (dx * dx + dy * dy < 15 * 15 && y < 50) {
+        if (dx * dx + dy * dy < 24 * 24 && y < 74) {
           px = GColorYellowARGB8;
-        } else if (y < 22) {
+        } else if (y < 30) {
           px = GColorImperialPurpleARGB8;
-        } else if (y < 36) {
+        } else if (y < 52) {
           px = GColorFashionMagentaARGB8;
-        } else if (y < 50) {
+        } else if (y < 74) {
           px = GColorOrangeARGB8;
         } else {
           px = ((x + y * 3) % 9 < 2) ? GColorVividCeruleanARGB8 : GColorCobaltBlueARGB8;
