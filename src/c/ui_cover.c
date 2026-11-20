@@ -120,12 +120,6 @@ static GColor background_for(GBitmap *bmp) {
   return (GColor){.argb = (uint8_t)(0xC0 | (r << 4) | (g << 2) | bl)};
 }
 
-// A darker shade of a color: each channel halved.
-static uint8_t darker(GColor c) {
-  return (uint8_t)(0xC0 | (((c.argb >> 4) & 3) >> 1) << 4 | (((c.argb >> 2) & 3) >> 1) << 2 |
-                   ((c.argb & 3) >> 1));
-}
-
 // --- Drawing ----------------------------------------------------------------
 
 static const uint8_t BAYER4[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
@@ -158,10 +152,10 @@ static void darken_lower_half(GContext *ctx) {
 }
 
 // Draws the whole cover, as wide as the screen and centered top to bottom.
-// The screen is a little taller than a square cover, which leaves a thin
-// strip above and below; they take the cover's standout color, deeper at the
-// bottom, the way music apps color the space around a cover. Works for the
-// quick preview and the full cover alike.
+// The screen is a little taller than a square cover; the thin strips that
+// leaves above and below are filled with a mirror image of the cover's own
+// edge, so the picture runs to the edge of the screen with nothing cropped,
+// stretched or barred. Works for the quick preview and the full cover alike.
 static void draw_cover_filling(GContext *ctx, GBitmap *bmp) {
   const GRect b = gbitmap_get_bounds(bmp);
   if (gbitmap_get_format(bmp) != GBitmapFormat8Bit || b.size.w <= 0 || b.size.h <= 0) {
@@ -176,13 +170,12 @@ static void draw_cover_filling(GContext *ctx, GBitmap *bmp) {
   const int top = (SCREEN_H - SCREEN_W) / 2;  // the strip above the cover
   for (int y = 0; y < SCREEN_H; y++) {
     const GBitmapDataRowInfo row = gbitmap_get_data_row_info(fb, y);
-    const int cy = y - top;
-    if (cy < 0 || cy >= SCREEN_W) {
-      const uint8_t strip = cy < 0 ? s_bg.argb : darker(s_bg);
-      for (int x = row.min_x; x <= row.max_x && x < SCREEN_W; x++) {
-        row.data[x] = strip;
-      }
-      continue;
+    int cy = y - top;
+    // Above and below the cover, its own edge is continued as a mirror image.
+    if (cy < 0) {
+      cy = -cy - 1;
+    } else if (cy >= SCREEN_W) {
+      cy = 2 * SCREEN_W - 1 - cy;
     }
     const uint8_t *line = src + (cy * b.size.h / SCREEN_W) * stride;
     for (int x = row.min_x; x <= row.max_x && x < SCREEN_W; x++) {
@@ -273,7 +266,7 @@ static void finish_top_strip(GContext *ctx) {
     const GBitmapDataRowInfo row = gbitmap_get_data_row_info(fb, y);
     for (int x = row.min_x; x <= row.max_x && x < SCREEN_W; x++) {
       const uint8_t before = s_top_strip[y * SCREEN_W + x];
-      const bool in_heart = x > HEART_CX - 16 && x < HEART_CX + 16;
+      const bool in_heart = x > HEART_CX - 18 && x < HEART_CX + 18;
       if (in_heart && row.data[x] == SEE_THROUGH) {
         row.data[x] = before;
       }
@@ -284,17 +277,20 @@ static void finish_top_strip(GContext *ctx) {
 
 static void draw_heart(GContext *ctx) {
   const bool liked = comm_get_liked() == 1;
-  // Straight on the cover: a thin black edge and a white outline. The middle
-  // is red when the song is liked; otherwise the cover shows through it.
+  // Straight on the cover, so it has to read on white and on black alike: a
+  // white band with a black line on both sides of it. The middle is red when
+  // the song is liked; otherwise the cover shows through.
   graphics_context_set_fill_color(ctx, GColorBlack);
-  draw_heart_shape(ctx, HEART_CX, HEART_CY, 4);
+  draw_heart_shape(ctx, HEART_CX, HEART_CY, 5);
   graphics_context_set_fill_color(ctx, GColorWhite);
-  draw_heart_shape(ctx, HEART_CX, HEART_CY, 3);
+  draw_heart_shape(ctx, HEART_CX, HEART_CY, 4);
+  graphics_context_set_fill_color(ctx, GColorBlack);
+  draw_heart_shape(ctx, HEART_CX, HEART_CY, 2);
   // Hard edges here, so every pixel of the middle is exactly the stand-in
   // color that finish_top_strip() looks for.
   graphics_context_set_antialiased(ctx, false);
   graphics_context_set_fill_color(ctx, liked ? GColorRed : (GColor){.argb = SEE_THROUGH});
-  draw_heart_shape(ctx, HEART_CX, HEART_CY, 0);
+  draw_heart_shape(ctx, HEART_CX, HEART_CY, 1);
   graphics_context_set_antialiased(ctx, true);
 }
 
