@@ -299,6 +299,12 @@ static void np_gesture(GestureKind kind, void *ctx) {
         case UI_HIT_NEXT:
           np_down_click(NULL, NULL);
           break;
+        case UI_HIT_SHUFFLE:
+          // Shown at once; the next report from Spotify confirms it.
+          s_shuffle = !s_shuffle;
+          ui_set_shuffle(s_shuffle);
+          comm_send_command(CMD_TOGGLE_SHUFFLE, NULL);
+          break;
         case UI_HIT_PLAY_PAUSE:
         case UI_HIT_RECORD:  // the cover
           // Shown at once; the next report from Spotify confirms it.
@@ -424,8 +430,7 @@ static GBitmap *s_demo_art;
 static void demo_now_playing(void) {
   window_stack_pop_all(false);
   // A cover drawn here: a sunset over the sea.
-  // DEMO_NP=4 uses the small preview size, to check it is drawn stretched.
-  const int side = (DEMO_NP == 4) ? 100 : 200;
+  const int side = 96;
   s_demo_art = gbitmap_create_blank(GSize(side, side), GBitmapFormat8Bit);
   if (s_demo_art) {
     uint8_t *data = gbitmap_get_data(s_demo_art);
@@ -455,6 +460,7 @@ static void demo_now_playing(void) {
   now_playing_window_push();
   ui_set_album_art(s_demo_art);
   track_info_cb("Golden Hour Drive", "The Night Owls", 215, 83, DEMO_NP != 2, DEMO_NP == 3, 0);
+  comm_demo_device("Galaxy S26 Ultra");
 }
 #endif
 

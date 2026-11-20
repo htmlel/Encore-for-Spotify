@@ -396,6 +396,12 @@ int comm_get_liked(void) { return s_liked; }
 // The device the music is playing on, "" when not known.
 static char s_device_name[40];
 const char *comm_get_device_name(void) { return s_device_name; }
+#if defined(DEMO_NP)
+// For simulator pictures: a device name without a phone to supply one.
+void comm_demo_device(const char *name) {
+  strncpy(s_device_name, name, sizeof(s_device_name) - 1);
+}
+#endif
 
 static void inbox_received_handler(DictionaryIterator *iter, void *context) {
   Tuple *liked_t = dict_find(iter, MESSAGE_KEY_LikedState);

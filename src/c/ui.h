@@ -32,6 +32,7 @@ typedef enum {
   UI_HIT_PREV,
   UI_HIT_PLAY_PAUSE,
   UI_HIT_NEXT,
+  UI_HIT_SHUFFLE,
 } UiHit;
 void ui_set_playing(bool playing);
 void ui_refresh(void);

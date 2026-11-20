@@ -12,9 +12,10 @@ function getChunkSize() {
 var transferInProgress = false;
 var lastUrl = null;
 
-// On the Time 2 the cover goes over twice: a small preview that shows within
-// a second or two, then the full cover to sharpen it. While the full cover is
-// still on its way, a newer song may cut in.
+// A large cover goes over twice: a small preview that shows within a second
+// or two, then the full cover to sharpen it. While the full cover is still
+// on its way, a newer song may cut in. (The Time 2's cover is small enough
+// now to go in one pass; this stays for any screen that shows a big one.)
 var PREVIEW_SIZE = 100;
 var sharpening = false;     // the full cover is being sent after its preview
 var slot0Abort = false;     // stop sending it; `nextUrl` is waiting
@@ -159,8 +160,8 @@ function processJpeg(jpegData, slot) {
     var platform = '';
     try {
       platform = Pebble.getActiveWatchInfo().platform || '';
-      // The Time 2 shows the whole cover, a square as wide as the screen.
-      if (platform === 'emery') { W = 200; H = 200; }
+      // The Time 2 shows the cover as a small square beside the song's name.
+      if (platform === 'emery') { W = 96; H = 96; }
       else if (platform === 'gabbro') { W = 260; H = 260; isRound = true; }
       else if (platform === 'chalk') { W = 180; H = 180; isRound = true; }
       else if (platform === 'aplite') { W = 96; H = 96; }
@@ -170,7 +171,8 @@ function processJpeg(jpegData, slot) {
       : isColorPlatform() ? resizeAndQuantize(raw.data, raw.width, raw.height, W, H)
         : resizeAndDither(raw.data, raw.width, raw.height, W, H);
 
-    if (slot === 0 && platform === 'emery') {
+    // Only worth it for a cover bigger than the preview itself.
+    if (slot === 0 && platform === 'emery' && W > PREVIEW_SIZE) {
       // The preview first; the full cover follows unless a newer song cut in.
       var preview = resizeAndQuantize(raw.data, raw.width, raw.height, PREVIEW_SIZE, PREVIEW_SIZE);
       var url = lastUrl;

@@ -30,6 +30,9 @@ bool comm_is_js_ready(void);
 int comm_get_liked(void);
 // The device the music is playing on, "" when not known.
 const char *comm_get_device_name(void);
+#if defined(DEMO_NP)
+void comm_demo_device(const char *name);
+#endif
 // Returns the most recently received album art bitmap, or NULL if none
 // has been loaded yet. Used to repaint art into a freshly recreated
 // BitmapLayer when the Now Playing window is reopened.
