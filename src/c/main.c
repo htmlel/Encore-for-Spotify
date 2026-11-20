@@ -1,3 +1,4 @@
+#include "notice.h"
 #include <pebble.h>
 #include "comm.h"
 #include "controls.h"
@@ -77,9 +78,25 @@ static void image_ready_cb(GBitmap *bitmap) {
   ui_set_album_art(bitmap);
 }
 
+// Messages the wearer has to see wherever they are in the app. The Now
+// Playing screen has no status line, so these get a notice of their own.
+static bool status_needs_notice(const char *status) {
+  static const char *const PREFIXES[] = {
+    "Playing on ", "Device changed", "Added to Liked", "Removed from Liked"};
+  for (size_t i = 0; i < ARRAY_LENGTH(PREFIXES); i++) {
+    if (strncmp(status, PREFIXES[i], strlen(PREFIXES[i])) == 0) return true;
+  }
+  return false;
+}
+
 static void status_cb(const char *status) {
   ui_set_status(status);
   list_set_status(status);
+  if (strncmp(status, "Error: ", 7) == 0) {
+    notice_show(status + 7, true);
+  } else if (status_needs_notice(status)) {
+    notice_show(status, false);
+  }
   if (strcmp(status, "Added to queue") == 0) {
     vibes_short_pulse();
   }
@@ -351,6 +368,10 @@ static void deinit(void) {
 
 int main(void) {
   init();
+#if defined(DEMO_NOTICE)
+  // For a simulator picture of the notice.
+  notice_show("Open Spotify on your phone first", true);
+#endif
   app_event_loop();
   deinit();
 }

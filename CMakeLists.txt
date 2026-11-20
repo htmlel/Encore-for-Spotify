@@ -10,3 +10,9 @@ pebble_app(SOURCES ${PLAYBACK_SOURCES})
 # Every JS file is listed so a change to any of them rebuilds the bundle.
 file(GLOB ENCORE_JS CONFIGURE_DEPENDS src/pkjs/*.js)
 pebble_js(SOURCES ${ENCORE_JS} ENTRY src/pkjs/index.js)
+
+# -DDEMO_NOTICE=ON shows a sample notice at launch, for a simulator picture.
+option(DEMO_NOTICE "Show a sample notice at launch" OFF)
+if(DEMO_NOTICE)
+  target_compile_definitions(app INTERFACE DEMO_NOTICE=1)
+endif()
