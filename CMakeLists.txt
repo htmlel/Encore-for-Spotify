@@ -21,3 +21,8 @@ endif()
 if(DEFINED DEMO_NP)
   target_compile_definitions(app INTERFACE DEMO_NP=${DEMO_NP})
 endif()
+
+# -DDEMO_LOOK=1 shows the full-cover Now Playing look (0 = card), with DEMO_NP.
+if(DEFINED DEMO_LOOK)
+  target_compile_definitions(app INTERFACE DEMO_LOOK=${DEMO_LOOK})
+endif()

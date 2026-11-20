@@ -57,7 +57,8 @@
       "ListItemUri": 145,
       "ListDone": 146,
       "LikedState": 129,
-      "DeviceName": 130
+      "DeviceName": 130,
+      "ArtSize": 131
     },
     "resources": {
       "media": [

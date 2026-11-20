@@ -48,6 +48,36 @@ void long_press_mode_toggle(void) {
   persist_write_int(LONG_PRESS_PERSIST_KEY, (int)s_long_press_mode);
 }
 
+// --- Now Playing look (persisted; user-selectable in About) ---
+#define NP_LOOK_PERSIST_KEY 44
+
+static NowPlayingLook s_np_look = NP_LOOK_CARD;
+
+static void now_playing_look_load(void) {
+#if defined(DEMO_LOOK)
+  s_np_look = (NowPlayingLook)DEMO_LOOK;
+#else
+  s_np_look = persist_read_int(NP_LOOK_PERSIST_KEY) == NP_LOOK_COVER ? NP_LOOK_COVER : NP_LOOK_CARD;
+#endif
+}
+
+NowPlayingLook now_playing_look_get(void) {
+  return s_np_look;
+}
+
+void now_playing_look_toggle(void) {
+  s_np_look = (s_np_look == NP_LOOK_CARD) ? NP_LOOK_COVER : NP_LOOK_CARD;
+  persist_write_int(NP_LOOK_PERSIST_KEY, (int)s_np_look);
+}
+
+int now_playing_art_side(void) {
+#if defined(PBL_PLATFORM_EMERY)
+  return s_np_look == NP_LOOK_COVER ? 200 : 96;
+#else
+  return 0;  // other watches keep the size the phone picks for them
+#endif
+}
+
 // --- Progress timer (local interpolation between Spotify polls) ---
 
 static void tick_cb(void *data) {
@@ -389,6 +419,7 @@ static void tutorial_done(void) {
 // --- App lifecycle ---
 
 static void init(void) {
+  now_playing_look_load();
   CommCallbacks cbs = {
     .on_image_ready = image_ready_cb,
     .on_status = status_cb,
@@ -430,7 +461,7 @@ static GBitmap *s_demo_art;
 static void demo_now_playing(void) {
   window_stack_pop_all(false);
   // A cover drawn here: a sunset over the sea.
-  const int side = 96;
+  const int side = now_playing_art_side();
   s_demo_art = gbitmap_create_blank(GSize(side, side), GBitmapFormat8Bit);
   if (s_demo_art) {
     uint8_t *data = gbitmap_get_data(s_demo_art);

@@ -42,6 +42,17 @@ typedef enum {
 LongPressMode long_press_mode_get(void);
 void long_press_mode_toggle(void);
 
+// The Now Playing look on the Pebble Time 2. Persisted; chosen under About.
+typedef enum {
+  NP_LOOK_CARD  = 0,   // cover beside the song's name, on black
+  NP_LOOK_COVER = 1    // cover across the whole screen, controls fade away
+} NowPlayingLook;
+
+NowPlayingLook now_playing_look_get(void);
+void now_playing_look_toggle(void);
+// The cover size, in pixels a side, that the chosen look wants from the phone.
+int now_playing_art_side(void);
+
 // List types
 typedef enum {
   LIST_TYPE_PLAYLISTS    = 0,

@@ -594,6 +594,10 @@ static void send_command_msg(AppCommand cmd, const char *context) {
   }
 
   dict_write_int32(iter, MESSAGE_KEY_Command, (int32_t)cmd);
+  const int art_side = now_playing_art_side();
+  if (art_side > 0) {
+    dict_write_int32(iter, MESSAGE_KEY_ArtSize, (int32_t)art_side);
+  }
   if (context) {
     dict_write_cstring(iter, MESSAGE_KEY_CommandContext, context);
   }

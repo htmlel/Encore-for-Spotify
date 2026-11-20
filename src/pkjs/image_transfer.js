@@ -22,6 +22,20 @@ var slot0Abort = false;     // stop sending it; `nextUrl` is waiting
 var nextUrl = null;
 var afterSlot0 = null;      // what to do when the running slot-0 send is done
 
+// The cover size the Time 2 wants, a side in pixels: small for the card look,
+// screen-wide for the full-cover look. The watch sends it with each command.
+var emerySide = 96;
+
+// True if the size changed, in which case covers already sent are forgotten.
+function setArtSize(side) {
+  side = Number(side);
+  if (!(side >= 32 && side <= 200) || side === emerySide) return false;
+  emerySide = side;
+  lastUrl = null;
+  dropPrefetch();
+  return true;
+}
+
 // Slot 1 — prefetched next-track art (emery/gabbro only)
 var prefetchInProgress = false;
 var prefetchAbort = false;
@@ -160,8 +174,8 @@ function processJpeg(jpegData, slot) {
     var platform = '';
     try {
       platform = Pebble.getActiveWatchInfo().platform || '';
-      // The Time 2 shows the cover as a small square beside the song's name.
-      if (platform === 'emery') { W = 96; H = 96; }
+      // The Time 2 asks for the size its chosen Now Playing look uses.
+      if (platform === 'emery') { W = emerySide; H = emerySide; }
       else if (platform === 'gabbro') { W = 260; H = 260; isRound = true; }
       else if (platform === 'chalk') { W = 180; H = 180; isRound = true; }
       else if (platform === 'aplite') { W = 96; H = 96; }
@@ -394,5 +408,6 @@ module.exports = {
   prefetchSupported: prefetchSupported,
   // Busy with a cover that should not be interrupted. The sharpening pass
   // can be, so it does not count.
-  isTransferring: function () { return transferInProgress && !sharpening; }
+  isTransferring: function () { return transferInProgress && !sharpening; },
+  setArtSize: setArtSize
 };

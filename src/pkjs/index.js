@@ -754,6 +754,11 @@ Pebble.addEventListener('ready', function() {
 });
 
 Pebble.addEventListener('appmessage', function(e) {
+  // The watch says with each command how big a cover its screen wants.
+  var artSize = e.payload['ArtSize'] || e.payload[131];
+  if (artSize && imageTransfer.setArtSize(artSize)) {
+    lastImageUrl = null;  // send the current cover again at the new size
+  }
   var cmd = e.payload['Command'] || e.payload[100];
   var ctx = e.payload['CommandContext'] || e.payload[101];
   if (cmd !== undefined && cmd !== null) handleCommand(cmd, ctx);

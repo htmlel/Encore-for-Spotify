@@ -21,7 +21,7 @@ static MenuLayer *s_about_menu;
 // Aplite also has no NP long-press feature, so no "Long Press" row.
 #define NUM_ABOUT_ROWS 2
 #else
-#define NUM_ABOUT_ROWS 5
+#define NUM_ABOUT_ROWS 6
 #endif
 
 static void tutorial_restart_done(void) {
@@ -59,6 +59,10 @@ static void about_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, voi
         long_press_mode_get() == LP_MODE_VOLUME ? "Volume" : "Skip 15s", NULL);
       break;
     case 4:
+      menu_cell_basic_draw(ctx, cell, "Now Playing look",
+        now_playing_look_get() == NP_LOOK_COVER ? "Full cover" : "Card", NULL);
+      break;
+    case 5:
       menu_cell_basic_draw(ctx, cell, "Version", APP_VERSION, NULL);
       break;
   }
@@ -72,6 +76,11 @@ static void about_select(MenuLayer *menu, MenuIndex *idx, void *d) {
   } else if (idx->row == 3) {
     long_press_mode_toggle();
     menu_layer_reload_data(s_about_menu);
+  } else if (idx->row == 4) {
+    now_playing_look_toggle();
+    menu_layer_reload_data(s_about_menu);
+    // The two looks want different cover sizes; this report tells the phone.
+    comm_send_command(CMD_FETCH_NOW_PLAYING, NULL);
   }
 #else
   (void)idx;
