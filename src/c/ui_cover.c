@@ -194,14 +194,14 @@ static void draw_edged_text(GContext *ctx, const char *text, GFont font, GRect r
 
 // A heart from two circles and a triangle, centered on (cx, cy).
 static void draw_heart_shape(GContext *ctx, int cx, int cy, int grow) {
-  const int r = 5 + grow;
-  graphics_fill_circle(ctx, GPoint(cx - 5, cy - 3), r);
-  graphics_fill_circle(ctx, GPoint(cx + 5, cy - 3), r);
+  const int r = 3 + grow;
+  graphics_fill_circle(ctx, GPoint(cx - 4, cy - 2), r);
+  graphics_fill_circle(ctx, GPoint(cx + 4, cy - 2), r);
   // Close the gap the two circles leave between them.
-  graphics_fill_rect(ctx, GRect(cx - 3, cy - 4, 7, 6), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(cx - 2, cy - 3, 5, 4), 0, GCornerNone);
   GPathInfo info = {
       .num_points = 3,
-      .points = (GPoint[]){{-10 - grow, 0}, {10 + grow, 0}, {0, 11 + grow}},
+      .points = (GPoint[]){{-7 - grow, 0}, {7 + grow, 0}, {0, 8 + grow}},
   };
   GPath *path = gpath_create(&info);
   if (path) {
