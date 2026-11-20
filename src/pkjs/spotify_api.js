@@ -75,8 +75,9 @@ function apiRequest(method, path, body, callback) {
 
 // Starting music needs a device that Spotify counts as active. When nothing
 // has played for a while there is none, and Spotify answers 404. In that
-// case this picks one of the devices that are on (the phone, a speaker) and
-// starts there; if none is on at all, it says so.
+// case the music is started on the wearer's phone, and only there: speakers,
+// TVs and speaker groups are never picked for them (they can be chosen by
+// hand under Play On). With no phone available, it says so.
 var deviceChosenHook = null;  // told which device was picked, so the watch can say
 
 function playRequest(method, path, body, callback) {
@@ -86,18 +87,14 @@ function playRequest(method, path, body, callback) {
       return;
     }
     apiRequest('GET', '/me/player/devices', null, function(err2, found) {
-      var devices = ((found && found.devices) || []).filter(function(d) {
-        return d && d.id && !d.is_restricted;
+      var phones = ((found && found.devices) || []).filter(function(d) {
+        return d && d.id && !d.is_restricted && d.type === 'Smartphone';
       });
-      if (err2 || !devices.length) {
+      if (err2 || !phones.length) {
         if (callback) callback(new Error('Open Spotify on your phone first'), null);
         return;
       }
-      // The phone first: it is the one the wearer has with them.
-      var chosen = devices[0];
-      for (var i = 0; i < devices.length; i++) {
-        if (devices[i].type === 'Smartphone') { chosen = devices[i]; break; }
-      }
+      var chosen = phones[0];
       var sep = path.indexOf('?') === -1 ? '?' : '&';
       apiRequest(method, path + sep + 'device_id=' + encodeURIComponent(chosen.id), body, function(err3, data3) {
         if (!err3 && deviceChosenHook) deviceChosenHook(chosen.name || 'device', chosen.volume_percent);
