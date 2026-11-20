@@ -68,39 +68,62 @@ static AppTimer *s_volume_timer;
 
 // --- Colors -----------------------------------------------------------------
 
-// A dark tint of the cover, used where the cover does not reach and while
+// The cover's standout color, used where the cover does not reach and while
 // there is no cover.
 static GColor background_for(GBitmap *bmp) {
   if (!bmp || gbitmap_get_format(bmp) != GBitmapFormat8Bit) {
     return GColorOxfordBlue;
   }
+  // Count how much of the cover each of the screen's 64 colors takes up.
+  static uint16_t counts[64];
+  memset(counts, 0, sizeof(counts));
   const GRect b = gbitmap_get_bounds(bmp);
   const uint8_t *data = gbitmap_get_data(bmp);
   const int stride = gbitmap_get_bytes_per_row(bmp);
-  int r = 0, g = 0, bl = 0, n = 0;
-  for (int y = 0; y < b.size.h; y += 4) {
-    for (int x = 0; x < b.size.w; x += 4) {
-      const uint8_t px = data[y * stride + x];
-      r += (px >> 4) & 3;
-      g += (px >> 2) & 3;
-      bl += px & 3;
-      n++;
+  for (int y = 0; y < b.size.h; y += 2) {
+    for (int x = 0; x < b.size.w; x += 2) {
+      counts[data[y * stride + x] & 0x3F]++;
     }
   }
-  if (n == 0) {
-    return GColorOxfordBlue;
+  // The standout color is a common one with some color to it: grays, white
+  // and black are passed over, and stronger colors count for more.
+  int best = -1;
+  uint32_t best_score = 0;
+  for (int c = 0; c < 64; c++) {
+    const int r = (c >> 4) & 3;
+    const int g = (c >> 2) & 3;
+    const int bl = c & 3;
+    const int hi = r > g ? (r > bl ? r : bl) : (g > bl ? g : bl);
+    const int lo = r < g ? (r < bl ? r : bl) : (g < bl ? g : bl);
+    const int strength = hi - lo;  // 0 for a gray, 3 for a pure color
+    if (strength == 0 || counts[c] == 0) {
+      continue;
+    }
+    const uint32_t score = (uint32_t)counts[c] * (uint32_t)(strength * strength);
+    if (score > best_score) {
+      best_score = score;
+      best = c;
+    }
   }
-  // Average 0..3 per channel, scaled to 0..2 so it stays on the dark side.
-  int cr = (r * 2 + n) / (n * 3);
-  int cg = (g * 2 + n) / (n * 3);
-  int cb = (bl * 2 + n) / (n * 3);
-  if (cr > 2) cr = 2;
-  if (cg > 2) cg = 2;
-  if (cb > 2) cb = 2;
-  if (cr + cg + cb == 0) {
-    return GColorDarkGray;   // a black cover still gets a bar that shows
+  if (best < 0) {
+    return GColorDarkGray;  // a cover with no color in it at all
   }
-  return (GColor){.argb = (uint8_t)(0xC0 | (cr << 4) | (cg << 2) | cb)};
+  int r = (best >> 4) & 3;
+  int g = (best >> 2) & 3;
+  int bl = best & 3;
+  // Keep it deep enough for white text: bring a bright color down a step.
+  if (r == 3 || g == 3 || bl == 3) {
+    r = r > 0 ? r - 1 : 0;
+    g = g > 0 ? g - 1 : 0;
+    bl = bl > 0 ? bl - 1 : 0;
+  }
+  return (GColor){.argb = (uint8_t)(0xC0 | (r << 4) | (g << 2) | bl)};
+}
+
+// A darker shade of a color: each channel halved.
+static uint8_t darker(GColor c) {
+  return (uint8_t)(0xC0 | (((c.argb >> 4) & 3) >> 1) << 4 | (((c.argb >> 2) & 3) >> 1) << 2 |
+                   ((c.argb & 3) >> 1));
 }
 
 // --- Drawing ----------------------------------------------------------------
@@ -135,9 +158,10 @@ static void darken_lower_half(GContext *ctx) {
 }
 
 // Draws the whole cover, as wide as the screen and centered top to bottom.
-// The screen is a little taller than a square cover, so a thin black strip is
-// left above and below; next to the watch's black bezel they do not show.
-// Works for the quick preview and the full cover alike.
+// The screen is a little taller than a square cover, which leaves a thin
+// strip above and below; they take the cover's standout color, deeper at the
+// bottom, the way music apps color the space around a cover. Works for the
+// quick preview and the full cover alike.
 static void draw_cover_filling(GContext *ctx, GBitmap *bmp) {
   const GRect b = gbitmap_get_bounds(bmp);
   if (gbitmap_get_format(bmp) != GBitmapFormat8Bit || b.size.w <= 0 || b.size.h <= 0) {
@@ -154,8 +178,9 @@ static void draw_cover_filling(GContext *ctx, GBitmap *bmp) {
     const GBitmapDataRowInfo row = gbitmap_get_data_row_info(fb, y);
     const int cy = y - top;
     if (cy < 0 || cy >= SCREEN_W) {
+      const uint8_t strip = cy < 0 ? s_bg.argb : darker(s_bg);
       for (int x = row.min_x; x <= row.max_x && x < SCREEN_W; x++) {
-        row.data[x] = GColorBlackARGB8;
+        row.data[x] = strip;
       }
       continue;
     }
@@ -217,11 +242,10 @@ static void draw_heart_shape(GContext *ctx, int cx, int cy, int grow) {
   }
 }
 
-// The time and heart are drawn over the top strip of the cover. A copy of
-// the strip from before they were drawn lets two things be done afterwards:
-// the middle of an unliked heart is put back, so the cover shows through it,
-// and while the controls are faded away, every other pixel of the time and
-// heart is put back too, which fades them to half strength.
+// The time and heart are drawn over the top strip of the cover, and stay at
+// full strength whether or not the controls are showing. A copy of the strip
+// from before they were drawn lets the middle of an unliked heart be put
+// back afterwards, so the cover shows through it.
 #define TOP_STRIP_H 44
 #define SEE_THROUGH GColorMagentaARGB8   // stands in for "cover shows here"
 static uint8_t s_top_strip[TOP_STRIP_H * SCREEN_W];
@@ -241,7 +265,6 @@ static void save_top_strip(GContext *ctx) {
 }
 
 static void finish_top_strip(GContext *ctx) {
-  const bool faded = s_controls < 8;
   GBitmap *fb = graphics_capture_frame_buffer(ctx);
   if (!fb) {
     return;
@@ -250,10 +273,8 @@ static void finish_top_strip(GContext *ctx) {
     const GBitmapDataRowInfo row = gbitmap_get_data_row_info(fb, y);
     for (int x = row.min_x; x <= row.max_x && x < SCREEN_W; x++) {
       const uint8_t before = s_top_strip[y * SCREEN_W + x];
-      const bool in_heart = x > HEART_CX - 14 && x < HEART_CX + 14;
+      const bool in_heart = x > HEART_CX - 16 && x < HEART_CX + 16;
       if (in_heart && row.data[x] == SEE_THROUGH) {
-        row.data[x] = before;
-      } else if (faded && row.data[x] != before && ((x + y) & 1)) {
         row.data[x] = before;
       }
     }
@@ -266,9 +287,9 @@ static void draw_heart(GContext *ctx) {
   // Straight on the cover: a thin black edge and a white outline. The middle
   // is red when the song is liked; otherwise the cover shows through it.
   graphics_context_set_fill_color(ctx, GColorBlack);
-  draw_heart_shape(ctx, HEART_CX, HEART_CY, 3);
+  draw_heart_shape(ctx, HEART_CX, HEART_CY, 4);
   graphics_context_set_fill_color(ctx, GColorWhite);
-  draw_heart_shape(ctx, HEART_CX, HEART_CY, 2);
+  draw_heart_shape(ctx, HEART_CX, HEART_CY, 3);
   // Hard edges here, so every pixel of the middle is exactly the stand-in
   // color that finish_top_strip() looks for.
   graphics_context_set_antialiased(ctx, false);
