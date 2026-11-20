@@ -154,63 +154,29 @@ static void darken_lower_half(GContext *ctx) {
 
 // The screen is 28 pixels taller than a square cover. The whole cover is
 // drawn in the middle, nothing cropped, and the 14-pixel strips above and
-// below it are made up from the cover's own edges: each edge is carried
-// outward and smoothed out more and more the further it gets from the
-// cover. A plain border simply continues; a busy edge melts into its own
-// colors. Works for the quick preview and the full cover alike.
+// below it are a dithered stretch of the cover's own edges: each edge pixel
+// is pulled straight out to the edge of the screen, and more and more of
+// the stretched pixels are dropped to black the further out they are, in a
+// regular dot pattern, so the picture fades off into the watch's bezel.
+// Works for the quick preview and the full cover alike.
 #define COVER_TOP ((SCREEN_H - SCREEN_W) / 2)
 
-// Fills screen rows first_y..last_y from the cover's edge rows starting at
-// cover row edge_y (three rows, going `step` further in each time).
+// Fills screen rows first_y..last_y by stretching cover row edge_y.
 // `near_y` is the screen row touching the cover.
-static void grow_edge(GBitmap *fb, GBitmap *bmp, int edge_y, int step, int first_y, int last_y,
-                      int near_y) {
+static void stretch_edge(GBitmap *fb, GBitmap *bmp, int edge_y, int first_y, int last_y,
+                         int near_y) {
   const GRect b = gbitmap_get_bounds(bmp);
-  const uint8_t *src = gbitmap_get_data(bmp);
-  const int stride = gbitmap_get_bytes_per_row(bmp);
-  // The edge across the screen, as running totals of each color channel, so
-  // that the average over any stretch of it is one subtraction.
-  static uint16_t total[3][SCREEN_W + 1];
-  for (int ch = 0; ch < 3; ch++) {
-    total[ch][0] = 0;
-  }
-  for (int x = 0; x < SCREEN_W; x++) {
-    const int sx = x * b.size.w / SCREEN_W;
-    int sum[3] = {0, 0, 0};
-    for (int r = 0; r < 3; r++) {
-      const uint8_t c = src[((edge_y + r * step) * b.size.h / SCREEN_W) * stride + sx];
-      sum[0] += (c >> 4) & 3;
-      sum[1] += (c >> 2) & 3;
-      sum[2] += c & 3;
-    }
-    for (int ch = 0; ch < 3; ch++) {
-      total[ch][x + 1] = (uint16_t)(total[ch][x] + sum[ch]);  // 0..9 a pixel
-    }
-  }
-  // A 4x4 pattern for turning in-between shades into dots of the screen's
-  // own colors.
+  const uint8_t *line =
+      gbitmap_get_data(bmp) + (edge_y * b.size.h / SCREEN_W) * gbitmap_get_bytes_per_row(bmp);
+  // A 4x4 pattern that decides which pixels go black first.
   static const uint8_t pattern[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
   for (int y = first_y; y <= last_y; y++) {
     const GBitmapDataRowInfo row = gbitmap_get_data_row_info(fb, y);
-    // Smoothed over a wider stretch the further from the cover.
-    const int away = y > near_y ? y - near_y : near_y - y;
-    const int reach = 2 + away * 3;
+    // 1 next to the cover, COVER_TOP at the edge of the screen; that many
+    // sixteenths of the pixels are black.
+    const int away = 1 + (y > near_y ? y - near_y : near_y - y);
     for (int x = row.min_x; x <= row.max_x && x < SCREEN_W; x++) {
-      const int from = x - reach < 0 ? 0 : x - reach;
-      const int to = x + reach + 1 > SCREEN_W ? SCREEN_W : x + reach + 1;
-      const int count = (to - from) * 3;   // three rows went into each total
-      uint8_t out = 0xC0;
-      for (int ch = 0; ch < 3; ch++) {
-        // The average level, 0..3, in sixteenths; the pattern decides
-        // whether an in-between shade rounds up or down at this pixel.
-        const int level16 = (total[ch][to] - total[ch][from]) * 16 / count;
-        int level = (level16 + pattern[y & 3][x & 3]) / 16;
-        if (level > 3) {
-          level = 3;
-        }
-        out |= (uint8_t)(level << (4 - 2 * ch));
-      }
-      row.data[x] = out;
+      row.data[x] = pattern[y & 3][x & 3] < away ? GColorBlackARGB8 : line[x * b.size.w / SCREEN_W];
     }
   }
 }
@@ -233,8 +199,8 @@ static void draw_cover_filling(GContext *ctx, GBitmap *bmp) {
       row.data[x] = line[x * b.size.w / SCREEN_W];
     }
   }
-  grow_edge(fb, bmp, 0, 1, 0, COVER_TOP - 1, COVER_TOP - 1);
-  grow_edge(fb, bmp, SCREEN_W - 1, -1, COVER_TOP + SCREEN_W, SCREEN_H - 1, COVER_TOP + SCREEN_W);
+  stretch_edge(fb, bmp, 0, 0, COVER_TOP - 1, COVER_TOP - 1);
+  stretch_edge(fb, bmp, SCREEN_W - 1, COVER_TOP + SCREEN_W, SCREEN_H - 1, COVER_TOP + SCREEN_W);
   graphics_release_frame_buffer(ctx, fb);
 }
 
