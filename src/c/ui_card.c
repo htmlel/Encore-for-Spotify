@@ -214,17 +214,26 @@ static void draw_buttons(GContext *ctx) {
 static void draw_shuffle_button(GContext *ctx) {
   const GRect pill = GRect(8, SLIDER_Y - 14, 44, 28);
   fill_pill(ctx, pill, COLOR_PILL);
-  // Two crossing arrows, green when shuffle is on.
+  // The usual shuffle sign, green when shuffle is on: two arrows that run
+  // level, swap heights in the middle, and run level again.
   const GColor color = s_shuffle ? COLOR_ACCENT : GColorWhite;
-  const int x = pill.origin.x + 12;
-  const int y = pill.origin.y + 8;
+  const int x = pill.origin.x + 8;
+  const int top = pill.origin.y + 9;
+  const int bottom = top + 10;
   graphics_context_set_stroke_color(ctx, color);
   graphics_context_set_stroke_width(ctx, 2);
-  graphics_draw_line(ctx, GPoint(x, y), GPoint(x + 16, y + 11));
-  graphics_draw_line(ctx, GPoint(x, y + 11), GPoint(x + 16, y));
+  // Starts at the top left, ends at the bottom right.
+  graphics_draw_line(ctx, GPoint(x, top), GPoint(x + 6, top));
+  graphics_draw_line(ctx, GPoint(x + 6, top), GPoint(x + 14, bottom));
+  graphics_draw_line(ctx, GPoint(x + 14, bottom), GPoint(x + 20, bottom));
+  // Starts at the bottom left, ends at the top right.
+  graphics_draw_line(ctx, GPoint(x, bottom), GPoint(x + 6, bottom));
+  graphics_draw_line(ctx, GPoint(x + 6, bottom), GPoint(x + 14, top));
+  graphics_draw_line(ctx, GPoint(x + 14, top), GPoint(x + 20, top));
+  // Arrowheads on the right-hand ends.
   graphics_context_set_fill_color(ctx, color);
-  draw_triangle(ctx, x + 15, y - 4, 6, 8, true);
-  draw_triangle(ctx, x + 15, y + 7, 6, 8, true);
+  draw_triangle(ctx, x + 20, top - 4, 6, 8, true);
+  draw_triangle(ctx, x + 20, bottom - 4, 6, 8, true);
 }
 
 static void format_time(char *out, size_t size, int32_t sec, bool minus) {
