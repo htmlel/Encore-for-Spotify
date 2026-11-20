@@ -110,6 +110,48 @@ function toggleLiked() {
   }
 }
 
+// --- Volume ---
+
+var lastDevice = null;  // the device in the last playback report
+
+// Turns the playing device up or down a step and tells the watch the result:
+// the new level, or why it could not be changed. Some devices (many phones)
+// do not let Spotify set their volume; Spotify says so per device.
+function changeVolume(delta) {
+  var apply = function(device) {
+    if (!device) {
+      sendError('Nothing is playing');
+      return;
+    }
+    var name = device.name || 'this device';
+    if (device.supports_volume === false) {
+      sendError('Volume on ' + name + " can't be changed from here");
+      return;
+    }
+    var from = typeof device.volume_percent === 'number' ? device.volume_percent : currentVolume;
+    var target = Math.max(0, Math.min(100, from + delta));
+    api.setVolume(target, function(err) {
+      if (err) {
+        sendError(err.message === 'API error 403'
+          ? 'Volume on ' + name + " can't be changed from here"
+          : 'Volume: ' + err.message);
+        return;
+      }
+      currentVolume = target;
+      device.volume_percent = target;
+      Pebble.sendAppMessage({ 'StatusMsg': 'Volume ' + target + '%' }, null, null);
+    });
+  };
+  // Ask Spotify for the current level first, so the step starts from where
+  // the volume really is (it may have been changed on the device itself).
+  api.getCurrentPlayback(function(err, data) {
+    if (!err && data && data.device) {
+      lastDevice = data.device;
+    }
+    apply(lastDevice);
+  });
+}
+
 // --- Devices and search ---
 
 // When the music had to be started on a device picked for the wearer, say
@@ -241,7 +283,10 @@ function fetchNowPlaying() {
     }, null, null);
 
     if (data.device) {
-      currentVolume = data.device.volume_percent;
+      lastDevice = data.device;
+      if (typeof data.device.volume_percent === 'number') {
+        currentVolume = data.device.volume_percent;
+      }
     }
   });
 }
@@ -487,12 +532,10 @@ function handleCommand(cmd, context) {
       api.previousTrack(function() { startPolling(); setTimeout(fetchNowPlaying, 500); });
       break;
     case 13: // CMD_VOLUME_UP
-      currentVolume = Math.min(100, currentVolume + 10);
-      api.setVolume(currentVolume, noop);
+      changeVolume(10);
       break;
     case 14: // CMD_VOLUME_DOWN
-      currentVolume = Math.max(0, currentVolume - 10);
-      api.setVolume(currentVolume, noop);
+      changeVolume(-10);
       break;
     case 17: // CMD_SEEK_FORWARD
     case 18: // CMD_SEEK_BACK

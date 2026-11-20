@@ -40,6 +40,12 @@ static bool s_playing;
 static bool s_shuffle;
 static int s_repeat;
 
+// The volume just set, shown for a moment where the device name is. A notice
+// would get in the way of pressing the button again.
+#define VOLUME_SHOW_MS 2500
+static char s_volume_text[20];
+static AppTimer *s_volume_timer;
+
 // --- Colors -----------------------------------------------------------------
 
 // A dark tint of the cover for the background, so every album gets its own
@@ -167,7 +173,12 @@ static void draw_text_and_progress(GContext *ctx) {
                      GTextAlignmentCenter, NULL);
 
   const char *device = comm_get_device_name();
-  if (device && device[0]) {
+  if (s_volume_text[0]) {
+    graphics_context_set_text_color(ctx, GColorWhite);
+    graphics_draw_text(ctx, s_volume_text, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                       GRect(8, DEVICE_Y, 184, 18), GTextOverflowModeTrailingEllipsis,
+                       GTextAlignmentCenter, NULL);
+  } else if (device && device[0]) {
     char line[48];
     snprintf(line, sizeof(line), "on %s", device);
     graphics_context_set_text_color(ctx, GColorLightGray);
@@ -293,6 +304,11 @@ void ui_init(Window *window) {
 
 void ui_deinit(void) {
   tick_timer_service_unsubscribe();
+  if (s_volume_timer) {
+    app_timer_cancel(s_volume_timer);
+    s_volume_timer = NULL;
+  }
+  s_volume_text[0] = '\0';
   if (s_title_layer) {
     marquee_layer_destroy(s_title_layer);
     s_title_layer = NULL;
@@ -322,8 +338,26 @@ void ui_clear_album_art_instant(void) {
   redraw();
 }
 
+static void volume_hide(void *data) {
+  s_volume_timer = NULL;
+  s_volume_text[0] = '\0';
+  redraw();
+}
+
 void ui_set_status(const char *text) {
-  (void)text;  // messages worth showing come up as notices (see notice.c)
+  // Only the volume is shown here; other messages worth showing come up as
+  // notices (see notice.c).
+  if (strncmp(text, "Volume ", 7) != 0 || !strchr(text, '%')) {
+    return;
+  }
+  strncpy(s_volume_text, text, sizeof(s_volume_text) - 1);
+  s_volume_text[sizeof(s_volume_text) - 1] = '\0';
+  if (s_volume_timer) {
+    app_timer_reschedule(s_volume_timer, VOLUME_SHOW_MS);
+  } else {
+    s_volume_timer = app_timer_register(VOLUME_SHOW_MS, volume_hide, NULL);
+  }
+  redraw();
 }
 
 void ui_set_track_info(const char *title, const char *artist) {
