@@ -1,0 +1,695 @@
+var auth = require('./spotify_auth');
+var api = require('./spotify_api');
+var imageTransfer = require('./image_transfer');
+
+var pollTimer = null;
+var POLL_INTERVAL = 5000;
+var currentVolume = 50;
+var lastImageUrl = null;
+var listSendInProgress = false;
+var lastFetchedItems = [];
+var lastFetchedListType = -1;
+var lastShuffleState = false;
+var lastRepeatState = 0; // 0=off, 1=context, 2=track
+var lastContextUri = null; // playlist/album/artist URI driving playback, if any
+var manuallyQueuedSet = {}; // URIs added via CMD_QUEUE_ADD; cleared when context changes
+var lastTrackUri = null; // URI of currently playing track (for prefetch promotion)
+var prefetchTimer = null; // debounce timer for next-track art prefetch
+
+// Target album-art size per platform
+function getTargetArtSize() {
+  try {
+    var platform = (Pebble.getActiveWatchInfo().platform || '');
+    if (platform === 'gabbro') return 260;
+    if (platform === 'chalk')  return 180;
+    if (platform === 'emery')  return 200;
+    if (platform === 'basalt') return 168;
+  } catch (e) {}
+  return 168;
+}
+
+function pickImageUrl(images, target) {
+  if (!images || images.length === 0) return null;
+  var best = null;
+  for (var i = 0; i < images.length; i++) {
+    var img = images[i];
+    var side = Math.max(img.width || 0, img.height || 0);
+    if (side >= target) {
+      if (!best || side < Math.max(best.width || 0, best.height || 0)) {
+        best = img;
+      }
+    }
+  }
+  return (best || images[0]).url;
+}
+
+function noop() {}
+
+function sendError(msg) {
+  console.log('[playback] ERROR: ' + msg);
+  try {
+    Pebble.sendAppMessage({ 'ErrorMsg': msg }, null, null);
+  } catch (e) { /* best effort */ }
+}
+
+function sendAuthStatus() {
+  var authed = auth.isAuthenticated() ? 1 : 0;
+  Pebble.sendAppMessage({ 'AuthStatus': authed }, null, null);
+}
+
+// --- Liked Songs ---
+
+var likedUri = null;     // the song the state below is about
+var likedState = null;   // true, false, or null while not known
+
+function savedFlag(data) {
+  // An array with one answer, in the old and the new call alike.
+  if (data && data.length) return !!data[0];
+  return null;
+}
+
+function refreshLiked(uri, then) {
+  api.isSaved(uri, function(err, data) {
+    if (uri !== likedUri) return;
+    var flag = err ? null : savedFlag(data);
+    likedState = flag;
+    Pebble.sendAppMessage({ 'LikedState': flag === null ? 2 : (flag ? 1 : 0) }, null, null);
+    if (then) then(flag);
+  });
+}
+
+function toggleLiked() {
+  var uri = likedUri;
+  if (!uri) {
+    sendError('No song playing');
+    return;
+  }
+  var apply = function(current) {
+    if (current === null) {
+      sendError('Could not check Liked Songs');
+      return;
+    }
+    api.setSaved(uri, !current, function(err) {
+      if (err) {
+        sendError('Like: ' + err.message);
+        // Put the watch back to what is true.
+        Pebble.sendAppMessage({ 'LikedState': current ? 1 : 0 }, null, null);
+        return;
+      }
+      if (uri === likedUri) likedState = !current;
+      Pebble.sendAppMessage({
+        'LikedState': !current ? 1 : 0,
+        'StatusMsg': !current ? 'Added to Liked Songs' : 'Removed from Liked Songs'
+      }, null, null);
+    });
+  };
+  if (likedState === null) {
+    refreshLiked(uri, apply);
+  } else {
+    apply(likedState);
+  }
+}
+
+// --- Devices and search ---
+
+function formatDevices(data) {
+  return (data.devices || []).filter(function(d) { return d && d.id && !d.is_restricted; })
+    .map(function(d) {
+      return { title: d.name || 'Device', subtitle: (d.is_active ? 'Playing here - ' : '') + (d.type || ''),
+               uri: d.id };
+    });
+}
+
+function firstArtist(item) {
+  return (item.artists && item.artists[0] && item.artists[0].name) || '';
+}
+
+// Songs first, then a few artists, albums and playlists, each labeled.
+function formatSearch(data) {
+  var out = [];
+  var take = function(group, max, subtitle) {
+    var items = (group && group.items) || [];
+    var n = 0;
+    for (var k = 0; k < items.length && n < max; k++) {
+      if (!items[k] || !items[k].uri) continue;  // playlists can come back empty
+      out.push({ title: items[k].name || '', subtitle: subtitle(items[k]), uri: items[k].uri });
+      n++;
+    }
+  };
+  take(data.tracks, 5, function(t) { return firstArtist(t); });
+  take(data.artists, 2, function() { return 'Artist'; });
+  take(data.albums, 3, function(a) { return 'Album - ' + firstArtist(a); });
+  take(data.playlists, 3, function() { return 'Playlist'; });
+  return out;
+}
+
+// --- Now Playing ---
+
+function fetchNowPlaying() {
+  if (listSendInProgress) return;
+  api.getCurrentPlayback(function(err, data) {
+    if (err) {
+      console.log('[playback] Now playing error: ' + err.message);
+      return;
+    }
+    if (!data || !data.item) return;
+
+    var track = data.item;
+    var isEpisode = (data.currently_playing_type === 'episode') || (track.type === 'episode');
+
+    var artistLine = '';
+    var artImages = null;
+    if (isEpisode) {
+      if (track.show) {
+        artistLine = track.show.name || track.show.publisher || '';
+      }
+      artImages = (track.images && track.images.length) ? track.images
+                : (track.show && track.show.images) ? track.show.images
+                : null;
+    } else {
+      if (track.artists) {
+        var names = [];
+        for (var i = 0; i < track.artists.length; i++) {
+          names.push(track.artists[i].name);
+        }
+        artistLine = names.join(', ');
+      }
+      if (track.album && track.album.images && track.album.images.length > 0) {
+        artImages = track.album.images;
+      }
+    }
+
+    if (artImages && artImages.length > 0) {
+      var imageUrl = pickImageUrl(artImages, getTargetArtSize());
+      if (imageUrl && imageUrl !== lastImageUrl) {
+        // Fast path: if a prefetched art matches the new track, swap it in
+        // with a single ImagePromote message instead of a full transfer.
+        if (track.uri && track.uri === imageTransfer.getPrefetchedUri()) {
+          lastImageUrl = imageUrl;
+          imageTransfer.promotePrefetch();
+        } else if (!imageTransfer.isTransferring()) {
+          lastImageUrl = imageUrl;
+          // Slot-0 transfer will free C-side prefetch buffers in
+          // handle_image_header; mirror that here so getPrefetchedUri()
+          // doesn't return a URI whose bitmap no longer exists.
+          imageTransfer.dropPrefetch();
+          imageTransfer.sendImageFromUrl(imageUrl);
+        }
+      }
+    }
+
+    lastShuffleState = !!data.shuffle_state;
+    lastRepeatState = (data.repeat_state === 'track') ? 2
+                    : (data.repeat_state === 'context') ? 1 : 0;
+    var newContextUri = (data.context && data.context.uri) || null;
+    if (newContextUri !== lastContextUri) {
+      manuallyQueuedSet = {};
+      imageTransfer.dropPrefetch();
+    }
+    lastContextUri = newContextUri;
+    lastTrackUri = track.uri || null;
+    schedulePrefetch();
+    // Whether this song is in Liked Songs, asked once per song.
+    var likeUri = (!isEpisode && track.uri && track.uri.indexOf(':track:') !== -1) ? track.uri : null;
+    if (likeUri !== likedUri) {
+      likedUri = likeUri;
+      likedState = null;
+      if (likeUri) {
+        refreshLiked(likeUri);
+      } else {
+        Pebble.sendAppMessage({ 'LikedState': 2 }, null, null);
+      }
+    }
+
+    Pebble.sendAppMessage({
+      'TrackTitle': track.name || '',
+      'TrackArtist': artistLine,
+      'TrackDuration': Math.floor(track.duration_ms / 1000),
+      'TrackElapsed': Math.floor((data.progress_ms || 0) / 1000),
+      'TrackIsPlaying': data.is_playing ? 1 : 0,
+      'ShuffleState': lastShuffleState ? 1 : 0,
+      'RepeatState': lastRepeatState
+    }, null, null);
+
+    if (data.device) {
+      currentVolume = data.device.volume_percent;
+    }
+  });
+}
+
+function startPolling() {
+  if (pollTimer) return;
+  fetchNowPlaying();
+  pollTimer = setInterval(fetchNowPlaying, POLL_INTERVAL);
+}
+
+// --- Next-track art prefetch (emery + gabbro only) ---
+
+function schedulePrefetch() {
+  if (!imageTransfer.prefetchSupported()) return;
+  if (prefetchTimer) clearTimeout(prefetchTimer);
+  // 2s debounce: if user is actively skipping tracks, the next poll cancels
+  // the pending prefetch before it fires.
+  prefetchTimer = setTimeout(maybePrefetchNext, 2000);
+}
+
+function maybePrefetchNext() {
+  prefetchTimer = null;
+  if (listSendInProgress) return;
+  if (imageTransfer.isTransferring()) {
+    prefetchTimer = setTimeout(maybePrefetchNext, 1500);
+    return;
+  }
+  api.getQueue(function(err, data) {
+    if (err || !data || !data.queue || data.queue.length === 0) return;
+    var nextTrack = data.queue[0];
+    if (!nextTrack || !nextTrack.uri) return;
+    // Don't re-prefetch what's already buffered.
+    if (nextTrack.uri === imageTransfer.getPrefetchedUri()) return;
+
+    var artImages = null;
+    if (nextTrack.type === 'episode') {
+      artImages = (nextTrack.images && nextTrack.images.length) ? nextTrack.images
+                : (nextTrack.show && nextTrack.show.images) ? nextTrack.show.images
+                : null;
+    } else if (nextTrack.album && nextTrack.album.images && nextTrack.album.images.length) {
+      artImages = nextTrack.album.images;
+    }
+    if (!artImages || !artImages.length) return;
+    var url = pickImageUrl(artImages, getTargetArtSize());
+    if (url) imageTransfer.sendPrefetchFromUrl(url, nextTrack.uri);
+  });
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+// --- List sending ---
+
+function sendListItem(listType, items, index, count) {
+  if (index >= count) {
+    listSendInProgress = false;
+    Pebble.sendAppMessage({
+      'ListType': listType,
+      'ListDone': 1
+    }, null, null);
+    return;
+  }
+
+  var item = items[index];
+  Pebble.sendAppMessage({
+    'ListType': listType,
+    'ListCount': count,
+    'ListIndex': index,
+    'ListItemTitle': item.title || '',
+    'ListItemSubtitle': item.subtitle || '',
+    'ListItemUri': item.uri || ''
+  }, function() {
+    sendListItem(listType, items, index + 1, count);
+  }, function() {
+    setTimeout(function() {
+      sendListItem(listType, items, index, count);
+    }, 500);
+  });
+}
+
+function fetchAndSendList(listType, apiFn, formatFn) {
+  lastFetchedListType = listType;
+  apiFn(function(err, data) {
+    if (err) {
+      sendError(err.message);
+      if (err.message === 'Token expired') sendAuthStatus();
+      return;
+    }
+    if (!data) {
+      sendError('No data');
+      return;
+    }
+    var items = formatFn(data);
+    lastFetchedItems = items;
+    var count = Math.min(items.length, 20);
+    if (count === 0) {
+      Pebble.sendAppMessage({
+        'ListType': listType,
+        'ListDone': 1
+      }, null, null);
+      return;
+    }
+    listSendInProgress = true;
+    sendListItem(listType, items, 0, count);
+  });
+}
+
+function formatPlaylists(data) {
+  return (data.items || []).map(function(i) {
+    return { title: i.name, subtitle: i.owner ? i.owner.display_name : '', uri: i.uri };
+  });
+}
+
+function formatTracks(data) {
+  return (data.items || []).map(function(i) {
+    var t = i.track || i;
+    return { title: t.name, subtitle: (t.artists && t.artists[0]) ? t.artists[0].name : '', uri: t.uri };
+  });
+}
+
+function formatArtists(data) {
+  return (data.artists && data.artists.items || []).map(function(i) {
+    return { title: i.name, subtitle: (i.genres && i.genres[0]) || '', uri: i.uri };
+  });
+}
+
+function formatShows(data) {
+  return (data.items || []).map(function(i) {
+    var s = i.show || i;
+    return { title: s.name, subtitle: s.publisher || '', uri: s.uri };
+  });
+}
+
+function formatAlbums(data) {
+  return (data.items || []).map(function(i) {
+    var a = i.album || i;
+    return { title: a.name, subtitle: (a.artists && a.artists[0]) ? a.artists[0].name : '', uri: a.uri };
+  });
+}
+
+function formatQueue(data) {
+  // The API puts the now-playing track in `currently_playing` and the
+  // *upcoming* entries in `queue`. Only upcoming is shown per the
+  // product decision.
+  return (data.queue || []).map(function(t) {
+    if (!t) return { title: '', subtitle: '', uri: '' };
+    var sub = '';
+    if (t.type === 'episode' && t.show) {
+      sub = t.show.name || '';
+    } else if (t.artists && t.artists[0]) {
+      sub = t.artists[0].name;
+    }
+    return { title: t.name || '', subtitle: sub, uri: t.uri || '' };
+  });
+}
+
+// Resolve a Spotify URI to a single track/episode URI playable via the
+// queue endpoint. The queue API only accepts track: or episode: URIs,
+// so container URIs must be resolved to their first playable item.
+function resolveToTrackUri(uri, cb) {
+  if (!uri) return cb(new Error('empty uri'));
+  if (uri.indexOf(':track:') !== -1 || uri.indexOf(':episode:') !== -1) {
+    return cb(null, uri);
+  }
+  var parts = uri.split(':');
+  var kind = parts[1], id = parts[2];
+  if (kind === 'playlist') {
+    api.getPlaylistFirstTrack(id, function(err, data) {
+      if (err) return cb(err);
+      var t = data && data.items && data.items[0] && data.items[0].track;
+      cb(null, t ? t.uri : null);
+    });
+  } else if (kind === 'album') {
+    api.getAlbumFirstTrack(id, function(err, data) {
+      if (err) return cb(err);
+      var t = data && data.items && data.items[0];
+      cb(null, t ? t.uri : null);
+    });
+  } else if (kind === 'artist') {
+    api.getArtistTopTrack(id, function(err, data) {
+      if (err) return cb(err);
+      var t = data && data.tracks && data.tracks[0];
+      cb(null, t ? t.uri : null);
+    });
+  } else if (kind === 'show') {
+    api.getShowEpisodes(id, function(err, data) {
+      if (err) return cb(err);
+      var e = data && data.items && data.items[0];
+      cb(null, e ? e.uri : null);
+    });
+  } else {
+    cb(new Error('unsupported uri'));
+  }
+}
+
+// --- Command dispatch ---
+
+function handleCommand(cmd, context) {
+  switch (cmd) {
+    case 1: // CMD_FETCH_NOW_PLAYING
+      fetchNowPlaying();
+      break;
+    case 2: // CMD_FETCH_PLAYLISTS
+      fetchAndSendList(0, api.getPlaylists, formatPlaylists);
+      break;
+    case 3: // CMD_FETCH_ARTISTS
+      fetchAndSendList(1, api.getFollowedArtists, formatArtists);
+      break;
+    case 4: // CMD_FETCH_ALBUMS
+      fetchAndSendList(2, api.getSavedAlbums, formatAlbums);
+      break;
+    case 5: // CMD_FETCH_LIKED_SONGS
+      fetchAndSendList(3, api.getLikedTracks, formatTracks);
+      break;
+    case 6: // CMD_FETCH_SHOWS
+      fetchAndSendList(4, api.getSavedShows, formatShows);
+      break;
+    case 8: // CMD_FETCH_QUEUE
+      fetchAndSendList(5, api.getQueue, formatQueue);
+      break;
+    case 10: // CMD_PLAY_PAUSE
+      api.getCurrentPlayback(function(err, data) {
+        if (err) { sendError(err.message); return; }
+        startPolling();
+        if (data && data.is_playing) {
+          api.pause(function() { setTimeout(fetchNowPlaying, 300); });
+        } else {
+          api.play(function() { setTimeout(fetchNowPlaying, 300); });
+        }
+      });
+      break;
+    case 11: // CMD_NEXT_TRACK
+      api.nextTrack(function() { startPolling(); setTimeout(fetchNowPlaying, 500); });
+      break;
+    case 12: // CMD_PREV_TRACK
+      api.previousTrack(function() { startPolling(); setTimeout(fetchNowPlaying, 500); });
+      break;
+    case 13: // CMD_VOLUME_UP
+      currentVolume = Math.min(100, currentVolume + 10);
+      api.setVolume(currentVolume, noop);
+      break;
+    case 14: // CMD_VOLUME_DOWN
+      currentVolume = Math.max(0, currentVolume - 10);
+      api.setVolume(currentVolume, noop);
+      break;
+    case 17: // CMD_SEEK_FORWARD
+    case 18: // CMD_SEEK_BACK
+      (function(delta) {
+        api.getCurrentPlayback(function(err, data) {
+          if (err || !data || !data.item) return;
+          var pos = (data.progress_ms || 0) + delta;
+          api.seek(Math.max(0, Math.min(data.item.duration_ms, pos)), function() { 
+            setTimeout(fetchNowPlaying, 300); 
+          });
+        });
+      })(cmd === 17 ? 15000 : -15000);
+      break;
+    case 20: // CMD_PLAY_CONTEXT
+      if (context) {
+        var uris = null;
+        if (context.indexOf(':track:') !== -1 && lastFetchedListType === 7) {
+          // A song picked from search results: just that song.
+          uris = [context];
+        } else if (context.indexOf(':track:') !== -1) {
+          uris = [];
+          var found = false;
+          for (var i = 0; i < lastFetchedItems.length; i++) {
+            if (lastFetchedItems[i].uri === context) found = true;
+            if (found) uris.push(lastFetchedItems[i].uri);
+          }
+          if (uris.length === 0) uris = [context];
+        }
+        api.playContext(uris ? null : context, function(err) {
+          if (err) sendError(err.message);
+          else setTimeout(fetchNowPlaying, 500);
+        }, uris ? { uris: uris } : null);
+      }
+      break;
+    case 24: // CMD_TOGGLE_SHUFFLE
+      (function() {
+        var next = !lastShuffleState;
+        api.setShuffle(next, function(err) {
+          if (err) { sendError('Shuffle: ' + err.message); return; }
+          lastShuffleState = next;
+          imageTransfer.dropPrefetch();
+          setTimeout(fetchNowPlaying, 300);
+          if (lastFetchedListType === 5) {
+            setTimeout(function() { fetchAndSendList(5, api.getQueue, formatQueue); }, 500);
+          }
+        });
+      })();
+      break;
+    case 25: // CMD_CYCLE_REPEAT
+      (function() {
+        var next = (lastRepeatState + 1) % 3;
+        var name = ['off', 'context', 'track'][next];
+        api.setRepeat(name, function(err) {
+          if (err) { sendError('Repeat: ' + err.message); return; }
+          lastRepeatState = next;
+          imageTransfer.dropPrefetch();
+          setTimeout(fetchNowPlaying, 300);
+          if (lastFetchedListType === 5) {
+            setTimeout(function() { fetchAndSendList(5, api.getQueue, formatQueue); }, 500);
+          }
+        });
+      })();
+      break;
+    case 26: // CMD_QUEUE_ADD (context = URI — resolves non-tracks to first track)
+      if (context) resolveToTrackUri(context, function(err, uri) {
+        if (err || !uri) { sendError('Queue: ' + (err ? err.message : 'no track')); return; }
+        api.addToQueue(uri, function(err2) {
+          if (err2) sendError('Queue: ' + err2.message);
+          else {
+            manuallyQueuedSet[uri] = true;
+            imageTransfer.dropPrefetch();
+            Pebble.sendAppMessage({ 'StatusMsg': 'Added to queue' }, null, null);
+            if (lastFetchedListType === 5) {
+              setTimeout(function() { fetchAndSendList(5, api.getQueue, formatQueue); }, 500);
+            }
+          }
+        });
+      });
+      break;
+    case 31: // CMD_TOGGLE_LIKE
+      toggleLiked();
+      break;
+    case 32: // CMD_FETCH_DEVICES
+      fetchAndSendList(6, api.getDevices, formatDevices);
+      break;
+    case 33: // CMD_TRANSFER (context = device id)
+      if (context) {
+        api.transferPlayback(context, function(err) {
+          if (err) { sendError('Devices: ' + err.message); return; }
+          var name = '';
+          for (var d = 0; d < lastFetchedItems.length; d++) {
+            if (lastFetchedItems[d].uri === context) name = lastFetchedItems[d].title;
+          }
+          Pebble.sendAppMessage({ 'StatusMsg': name ? 'Playing on ' + name : 'Device changed' }, null, null);
+          startPolling();
+          setTimeout(fetchNowPlaying, 1000);
+        });
+      }
+      break;
+    case 34: // CMD_SEARCH (context = what was said)
+      if (context) {
+        fetchAndSendList(7, function(cb) { api.search(context, cb); }, formatSearch);
+      }
+      break;
+    case 21: // CMD_PLAY_SHOW
+      if (context) {
+        var marker = ':show:';
+        var showId = context.substring(context.indexOf(marker) + marker.length);
+        api.getShowEpisodes(showId, function(err, data) {
+          if (err || !data || !data.items || !data.items[0]) { sendError('No episodes'); return; }
+          api.playContext(null, function(err2) {
+            if (!err2) { startPolling(); setTimeout(fetchNowPlaying, 500); }
+          }, { uris: [data.items[0].uri] });
+        });
+      }
+      break;
+    case 27: // CMD_QUEUE_SKIP_TO — jump directly to a queue track by URI
+      if (context) {
+        (function(targetUri) {
+          stopPolling();
+          imageTransfer.dropPrefetch();
+          // Build the uris[] tail from the cached queue, target onward.
+          // Used as the fallback when context+offset isn't available.
+          var tail = [];
+          if (lastFetchedListType === 5) {
+            var found = false;
+            for (var i = 0; i < lastFetchedItems.length; i++) {
+              if (lastFetchedItems[i].uri === targetUri) found = true;
+              if (found) tail.push(lastFetchedItems[i].uri);
+            }
+          }
+          // Spotify rejects the whole uris[] body if any entry is invalid.
+          tail = tail.filter(function(u) {
+            return u && (u.indexOf(':track:') !== -1 || u.indexOf(':episode:') !== -1);
+          });
+          if (tail.length === 0) tail = [targetUri];
+
+          var afterPlay = function(err) {
+            if (err) { sendError(err.message); return; }
+            startPolling();
+            setTimeout(fetchNowPlaying, 500);
+          };
+
+          var playWithUris = function() {
+            api.playContext(null, afterPlay, { uris: tail });
+          };
+
+          // Manually queued tracks aren't in the playlist context — Spotify
+          // silently no-ops Option A (returns 204 while doing nothing) when
+          // offset.uri isn't in context_uri's tracks. Skip to Option B for those.
+          var isManual = !!manuallyQueuedSet[targetUri];
+
+          if (lastContextUri && !isManual) {
+            // Option A: jump within the playing context — preserves
+            // shuffle/repeat-context and Spotify's recommendation pool.
+            api.playContext(null, function(err) {
+              if (err) { playWithUris(); return; }
+              // Verify Spotify actually moved to the target.
+              setTimeout(function() {
+                api.getCurrentPlayback(function(verr, vdata) {
+                  if (verr) { afterPlay(null); return; }
+                  var nowUri = vdata && vdata.item && vdata.item.uri;
+                  var playing = vdata && vdata.is_playing;
+                  if (nowUri !== targetUri && !playing) {
+                    playWithUris();
+                  } else {
+                    afterPlay(null);
+                  }
+                });
+              }, 800);
+            }, { context_uri: lastContextUri, offset: { uri: targetUri } });
+          } else {
+            // Option B — pure user-queue session OR known manual queue add.
+            playWithUris();
+          }
+        })(context);
+      }
+      break;
+    case 30: // CMD_FETCH_ART
+      if (context) imageTransfer.sendImageFromUrl(context);
+      break;
+  }
+}
+
+auth.init(function(authed) {
+  sendAuthStatus();
+  if (authed) startPolling();
+  else stopPolling();
+});
+
+Pebble.addEventListener('ready', function() {
+  Pebble.sendAppMessage({ 'JsReady': 1 });
+  sendAuthStatus();
+  if (auth.isAuthenticated()) {
+    startPolling();
+    setTimeout(fetchNowPlaying, 1000);
+  }
+});
+
+Pebble.addEventListener('appmessage', function(e) {
+  var cmd = e.payload['Command'] || e.payload[100];
+  var ctx = e.payload['CommandContext'] || e.payload[101];
+  if (cmd !== undefined && cmd !== null) handleCommand(cmd, ctx);
+  if (e.payload['PrefetchAbort']) {
+    // Watch couldn't allocate slot-1 or had nothing to promote. Drop our
+    // local prefetch bookkeeping and clear lastImageUrl so the next
+    // fetchNowPlaying takes the slot-0 slow path (and refreshes the
+    // currently shown art if we're already stuck).
+    imageTransfer.dropPrefetch();
+    lastImageUrl = null;
+  }
+});

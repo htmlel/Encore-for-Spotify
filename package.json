@@ -1,0 +1,73 @@
+{
+  "name": "encore",
+  "author": "htmlel (based on Playback for Spotify by alex_pavlov)",
+  "version": "1.0.0",
+  "keywords": [
+    "pebble-app"
+  ],
+  "private": true,
+  "dependencies": {
+    "jpeg-js": "^0.3.7"
+  },
+  "pebble": {
+    "displayName": "Encore",
+    "uuid": "5a1f0c3e-8b7d-4c1a-9e55-2d0b6f3a7c41",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "emery"
+    ],
+    "watchapp": {
+      "watchface": false,
+      "iconResourceId": "IMAGE_MENU_ICON"
+    },
+    "capabilities": [
+      "configurable"
+    ],
+    "messageKeys": {
+      "ImageWidth": 0,
+      "ImageHeight": 1,
+      "ImageDataSize": 2,
+      "ImageChunksTotal": 3,
+      "ImageChunkIndex": 4,
+      "ImageChunkData": 5,
+      "ImageSlot": 6,
+      "ImagePromote": 7,
+      "PrefetchAbort": 8,
+      "RequestArtist": 10,
+      "RequestAlbum": 11,
+      "JsReady": 20,
+      "ErrorMsg": 21,
+      "StatusMsg": 22,
+      "Command": 100,
+      "CommandContext": 101,
+      "TrackTitle": 120,
+      "TrackArtist": 121,
+      "TrackDuration": 123,
+      "TrackElapsed": 124,
+      "TrackIsPlaying": 125,
+      "ShuffleState": 126,
+      "AuthStatus": 127,
+      "RepeatState": 128,
+      "ListType": 140,
+      "ListCount": 141,
+      "ListIndex": 142,
+      "ListItemTitle": 143,
+      "ListItemSubtitle": 144,
+      "ListItemUri": 145,
+      "ListDone": 146,
+      "LikedState": 129
+    },
+    "resources": {
+      "media": [
+        {
+          "menuIcon": true,
+          "type": "bitmap",
+          "name": "IMAGE_MENU_ICON",
+          "file": "icon.png"
+        }
+      ]
+    },
+    "manifestVersion": 1
+  }
+}

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Encore login</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<style>
+  body { background: #121212; color: #fff; font-family: -apple-system, Roboto, "Segoe UI", sans-serif;
+         margin: 0; padding: 24px 20px 48px; line-height: 1.45; }
+  main { max-width: 560px; margin: 0 auto; }
+  h1 { font-size: 24px; margin: 8px 0 4px; }
+  h2 { font-size: 17px; margin: 0 0 6px; }
+  p, li { font-size: 15px; color: #cfcfcf; }
+  .lead { color: #9be7b4; font-weight: 600; }
+  .box { border: 1px solid #333; border-radius: 10px; padding: 16px; margin-top: 16px; }
+  .num { display: inline-block; width: 26px; height: 26px; line-height: 26px; text-align: center;
+         border-radius: 13px; background: #1db954; color: #000; font-weight: 700; margin-right: 8px; }
+  button { display: block; width: 100%; background: #1db954; color: #000; font-weight: 700;
+           padding: 15px; font-size: 17px; border-radius: 26px; border: none; margin-top: 12px; }
+  textarea, .mono { width: 100%; box-sizing: border-box; background: #1e1e1e; color: #fff;
+           border: 1px solid #444; border-radius: 6px; padding: 10px; font-size: 13px;
+           font-family: ui-monospace, Menlo, monospace; word-break: break-all; margin-top: 10px; }
+  textarea { height: 96px; }
+  .warn { color: #ffb74d; }
+  .hide { display: none; }
+  a { color: #9be7b4; }
+</style>
+</head>
+<body>
+<main>
+
+<!-- After logging in: Spotify sends the browser here with a one-time code. -->
+<section id="done" class="hide">
+  <h1>Almost done</h1>
+  <p class="lead">Spotify approved the login.</p>
+  <div class="box">
+    <h2><span class="num">1</span>Copy this address</h2>
+    <button id="copy">Copy</button>
+    <p id="copied"></p>
+    <textarea id="addr" readonly></textarea>
+  </div>
+  <div class="box">
+    <h2><span class="num">2</span>Go back to the Pebble app</h2>
+    <p>In the app's Settings page, paste it into step 3 and tap <b>Finish</b>. Your watch will
+       tell you when it's connected.</p>
+    <p>The address works once and only for a few minutes.</p>
+  </div>
+</section>
+
+<section id="failed" class="hide">
+  <h1>Login didn't go through</h1>
+  <p class="warn" id="why"></p>
+  <p>Go back to the Pebble app, tap <b>Copy login link</b> again and give it another try.</p>
+</section>
+
+<!-- Opened directly: how to set things up. -->
+<section id="guide" class="hide">
+  <h1>Setting up</h1>
+  <p>Spotify asks every person who uses a small app like this one to register it themselves.
+     It takes about five minutes, once. You need Spotify Premium.</p>
+
+  <div class="box">
+    <h2><span class="num">1</span>Create a Spotify app</h2>
+    <p>Open <a href="https://developer.spotify.com/dashboard">developer.spotify.com/dashboard</a>
+       in this browser, log in, and tap <b>Create app</b>.</p>
+    <ul>
+      <li><b>App name</b> and <b>description</b>: anything you like.</li>
+      <li><b>Redirect URI</b>: paste exactly this, then tap Add:</li>
+    </ul>
+    <div class="mono" id="redirect"></div>
+    <button id="copyRedirect">Copy the Redirect URI</button>
+    <ul>
+      <li>Under "Which API/SDKs are you planning to use?" pick <b>Web API</b>.</li>
+      <li>Agree to the terms and tap <b>Save</b>.</li>
+    </ul>
+  </div>
+
+  <div class="box">
+    <h2><span class="num">2</span>Add yourself as a user</h2>
+    <p>In your new app, open <b>User Management</b> and add your name and the email address of
+       your Spotify account.</p>
+  </div>
+
+  <div class="box">
+    <h2><span class="num">3</span>Copy your Client ID</h2>
+    <p>On the app's <b>Basic Information</b> page, copy the <b>Client ID</b>.</p>
+  </div>
+
+  <div class="box">
+    <h2><span class="num">4</span>Connect the watch app</h2>
+    <p>In the Pebble app, open this watch app's <b>Settings</b>, paste the Client ID, tap
+       <b>Copy login link</b>, and follow the three steps shown there.</p>
+  </div>
+</section>
+
+</main>
+<script>
+(function () {
+  function $(id) { return document.getElementById(id); }
+  function param(name) {
+    var m = new RegExp('[?&]' + name + '=([^&#]*)').exec(location.search);
+    return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : null;
+  }
+  function copyText(text, field, note) {
+    var done = function (ok) {
+      note.textContent = ok ? 'Copied.' : 'Press and hold the text below to copy it.';
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, function () {
+        done(fallback());
+      });
+    } else {
+      done(fallback());
+    }
+    function fallback() {
+      if (!field.select) return false;
+      field.focus();
+      field.select();
+      try { return document.execCommand('copy'); } catch (e) { return false; }
+    }
+  }
+
+  var code = param('code');
+  var error = param('error');
+  if (code) {
+    $('done').className = '';
+    $('addr').value = location.href;
+    $('copy').onclick = function () { copyText(location.href, $('addr'), $('copied')); };
+  } else if (error) {
+    $('failed').className = '';
+    $('why').textContent = error === 'access_denied' ? 'The login was canceled.' : 'Spotify said: ' + error;
+  } else {
+    $('guide').className = '';
+    var here = location.origin + location.pathname;
+    $('redirect').textContent = here;
+    $('copyRedirect').onclick = function () {
+      var btn = $('copyRedirect');
+      copyText(here, {}, { set textContent(v) { btn.textContent = v === 'Copied.' ? 'Copied' : 'Copy the Redirect URI'; } });
+    };
+  }
+})();
+</script>
+</body>
+</html>
