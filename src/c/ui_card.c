@@ -228,17 +228,17 @@ static void draw_shuffle_sign(GContext *ctx, int cx, int cy, int scale, GColor c
   graphics_context_set_stroke_width(ctx, 2);
   // Two arrows that run level, swap heights in the middle, and run level
   // again: one from the top left to the bottom right, one the other way.
-  graphics_draw_line(ctx, GPoint(SX(-13), top), GPoint(SX(-7), top));
-  graphics_draw_line(ctx, GPoint(SX(-7), top), GPoint(SX(1), bottom));
-  graphics_draw_line(ctx, GPoint(SX(1), bottom), GPoint(SX(7), bottom));
-  graphics_draw_line(ctx, GPoint(SX(-13), bottom), GPoint(SX(-7), bottom));
-  graphics_draw_line(ctx, GPoint(SX(-7), bottom), GPoint(SX(1), top));
-  graphics_draw_line(ctx, GPoint(SX(1), top), GPoint(SX(7), top));
+  graphics_draw_line(ctx, GPoint(SX(-12), top), GPoint(SX(-7), top));
+  graphics_draw_line(ctx, GPoint(SX(-7), top), GPoint(SX(0), bottom));
+  graphics_draw_line(ctx, GPoint(SX(0), bottom), GPoint(SX(5), bottom));
+  graphics_draw_line(ctx, GPoint(SX(-12), bottom), GPoint(SX(-7), bottom));
+  graphics_draw_line(ctx, GPoint(SX(-7), bottom), GPoint(SX(0), top));
+  graphics_draw_line(ctx, GPoint(SX(0), top), GPoint(SX(5), top));
   graphics_context_set_fill_color(ctx, color);
-  const int head = 6 * scale / 16;
+  const int head = 7 * scale / 16;
   if (head > 0) {
-    draw_triangle(ctx, SX(7), top - 4, head, 8, true);
-    draw_triangle(ctx, SX(7), bottom - 4, head, 8, true);
+    draw_triangle(ctx, SX(5), top - 5, head, 10, true);
+    draw_triangle(ctx, SX(5), bottom - 5, head, 10, true);
   }
   #undef SX
 }
@@ -312,7 +312,7 @@ static void draw_mode_button(GContext *ctx) {
   if (repeat_face) {
     draw_repeat_sign(ctx, cx, cy, scale, s_repeat ? COLOR_ACCENT : GColorWhite, s_repeat == 2);
   } else {
-    draw_shuffle_sign(ctx, cx - 3, cy, scale, s_shuffle ? COLOR_ACCENT : GColorWhite);
+    draw_shuffle_sign(ctx, cx, cy, scale, s_shuffle ? COLOR_ACCENT : GColorWhite);
   }
   // A green dot on the corner of the button when the one that is not showing
   // is switched on, so neither is ever on out of sight.
