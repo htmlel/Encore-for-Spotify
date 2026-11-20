@@ -221,11 +221,13 @@ static void mode_changed_cb(ControlMode mode) {
 // --- Now Playing window click config ---
 
 static void np_up_click(ClickRecognizerRef r, void *ctx) {
+  ui_wake();
   ui_hint_animation_dir(true);   // reverse: exit right, enter from left
   comm_send_command(CMD_PREV_TRACK, NULL);
 }
 
 static void np_down_click(ClickRecognizerRef r, void *ctx) {
+  ui_wake();
   ui_hint_animation_dir(false);  // forward: exit left, enter from right
   comm_send_command(CMD_NEXT_TRACK, NULL);
 }
@@ -243,10 +245,12 @@ static void np_select_click(ClickRecognizerRef r, void *ctx) {
 // louder/quieter convention. music_command_cb handles status text and
 // optimistic UI updates.
 static void np_up_long_click(ClickRecognizerRef r, void *ctx) {
+  ui_wake();
   music_command_cb(s_long_press_mode == LP_MODE_VOLUME ? MUSIC_CMD_VOL_UP : MUSIC_CMD_SEEK_BACK);
 }
 
 static void np_down_long_click(ClickRecognizerRef r, void *ctx) {
+  ui_wake();
   music_command_cb(s_long_press_mode == LP_MODE_VOLUME ? MUSIC_CMD_VOL_DOWN : MUSIC_CMD_SEEK_FWD);
 }
 #endif
@@ -278,6 +282,13 @@ static void np_gesture(GestureKind kind, void *ctx) {
       }
       s_last_tap_s = now_s;
       s_last_tap_ms = now_ms;
+      // With only the cover showing, the first tap just brings the controls
+      // back; it does not press whatever was hidden under the finger.
+      if (!ui_controls_shown()) {
+        ui_wake();
+        break;
+      }
+      ui_wake();
       switch (ui_hit(touch_input_last_tap())) {
         case UI_HIT_HEART:
           comm_send_command(CMD_TOGGLE_LIKE, NULL);
@@ -413,12 +424,16 @@ static GBitmap *s_demo_art;
 static void demo_now_playing(void) {
   window_stack_pop_all(false);
   // A cover drawn here: a sunset over the sea.
-  s_demo_art = gbitmap_create_blank(GSize(200, 200), GBitmapFormat8Bit);
+  // DEMO_NP=4 uses the small preview size, to check it is drawn stretched.
+  const int side = (DEMO_NP == 4) ? 100 : 200;
+  s_demo_art = gbitmap_create_blank(GSize(side, side), GBitmapFormat8Bit);
   if (s_demo_art) {
     uint8_t *data = gbitmap_get_data(s_demo_art);
     const int stride = gbitmap_get_bytes_per_row(s_demo_art);
-    for (int y = 0; y < 200; y++) {
-      for (int x = 0; x < 200; x++) {
+    for (int row = 0; row < side; row++) {
+      for (int col = 0; col < side; col++) {
+        const int x = col * 200 / side;
+        const int y = row * 200 / side;
         const int dx = x - 100;
         const int dy = y - 80;
         uint8_t px;
@@ -433,7 +448,7 @@ static void demo_now_playing(void) {
         } else {
           px = ((x + y * 3) % 9 < 2) ? GColorVividCeruleanARGB8 : GColorCobaltBlueARGB8;
         }
-        data[y * stride + x] = px;
+        data[row * stride + col] = px;
       }
     }
   }

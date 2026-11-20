@@ -36,3 +36,7 @@ typedef enum {
 void ui_set_playing(bool playing);
 void ui_refresh(void);
 UiHit ui_hit(GPoint tap);
+// The Time 2's controls fade out when left alone. ui_wake() brings them back;
+// ui_controls_shown() says whether they are (or are coming) up.
+void ui_wake(void);
+bool ui_controls_shown(void);

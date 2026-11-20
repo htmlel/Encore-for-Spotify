@@ -12,6 +12,15 @@ function getChunkSize() {
 var transferInProgress = false;
 var lastUrl = null;
 
+// On the Time 2 the cover goes over twice: a small preview that shows within
+// a second or two, then the full cover to sharpen it. While the full cover is
+// still on its way, a newer song may cut in.
+var PREVIEW_SIZE = 100;
+var sharpening = false;     // the full cover is being sent after its preview
+var slot0Abort = false;     // stop sending it; `nextUrl` is waiting
+var nextUrl = null;
+var afterSlot0 = null;      // what to do when the running slot-0 send is done
+
 // Slot 1 — prefetched next-track art (emery/gabbro only)
 var prefetchInProgress = false;
 var prefetchAbort = false;
@@ -147,8 +156,9 @@ function processJpeg(jpegData, slot) {
   try {
     var raw = jpeg.decode(jpegData, { useTArray: true });
     var W = 144, H = 106, isRound = false;
+    var platform = '';
     try {
-      var platform = Pebble.getActiveWatchInfo().platform || '';
+      platform = Pebble.getActiveWatchInfo().platform || '';
       // The Time 2 shows the whole cover, a square as wide as the screen.
       if (platform === 'emery') { W = 200; H = 200; }
       else if (platform === 'gabbro') { W = 260; H = 260; isRound = true; }
@@ -160,6 +170,19 @@ function processJpeg(jpegData, slot) {
       : isColorPlatform() ? resizeAndQuantize(raw.data, raw.width, raw.height, W, H)
         : resizeAndDither(raw.data, raw.width, raw.height, W, H);
 
+    if (slot === 0 && platform === 'emery') {
+      // The preview first; the full cover follows unless a newer song cut in.
+      var preview = resizeAndQuantize(raw.data, raw.width, raw.height, PREVIEW_SIZE, PREVIEW_SIZE);
+      var url = lastUrl;
+      afterSlot0 = function () {
+        if (lastUrl !== url) return;
+        sharpening = true;
+        afterSlot0 = function () { sharpening = false; };
+        sendImageToWatch(imageData, W, H, 0);
+      };
+      sendImageToWatch(preview, PREVIEW_SIZE, PREVIEW_SIZE, 0);
+      return;
+    }
     sendImageToWatch(imageData, W, H, slot);
   } catch (ex) {
     if (slot === 1) {
@@ -172,7 +195,16 @@ function processJpeg(jpegData, slot) {
 }
 
 function downloadAndSend(url) {
-  if (transferInProgress || url === lastUrl) return;
+  if (url === lastUrl) return;
+  if (transferInProgress) {
+    // A sharpening pass gives way to a newer cover; a preview is short enough
+    // to let finish.
+    if (sharpening) {
+      slot0Abort = true;
+      nextUrl = url;
+    }
+    return;
+  }
   // Current art always wins — abort any in-flight prefetch.
   if (prefetchInProgress) prefetchAbort = true;
   lastUrl = url;
@@ -261,6 +293,9 @@ function finishChunkRun(slot) {
     prefetchReady = true;
   } else {
     transferInProgress = false;
+    var then = afterSlot0;
+    afterSlot0 = null;
+    if (then) then();
   }
 }
 
@@ -269,13 +304,30 @@ function failChunkRun(slot) {
     resetPrefetch();
   } else {
     transferInProgress = false;
+    sharpening = false;
+    afterSlot0 = null;
     lastUrl = null;
     sendError('Chunk fail');
   }
 }
 
+// Stops the sharpening pass for a newer cover. True if it did.
+function giveWayToNext() {
+  if (!slot0Abort) return false;
+  slot0Abort = false;
+  sharpening = false;
+  afterSlot0 = null;
+  transferInProgress = false;
+  var url = nextUrl;
+  nextUrl = null;
+  lastUrl = null;
+  if (url) downloadAndSend(url);
+  return true;
+}
+
 function sendChunk(data, index, totalChunks, chunkSize, slot) {
   if (slot === 1 && prefetchAbort) { resetPrefetch(); return; }
+  if (slot !== 1 && giveWayToNext()) return;
 
   var start = index * chunkSize;
   var end = Math.min(start + chunkSize, data.length);
@@ -338,5 +390,7 @@ module.exports = {
   promotePrefetch: promotePrefetch,
   getPrefetchedUri: getPrefetchedUri,
   prefetchSupported: prefetchSupported,
-  isTransferring: function () { return transferInProgress; }
+  // Busy with a cover that should not be interrupted. The sharpening pass
+  // can be, so it does not count.
+  isTransferring: function () { return transferInProgress && !sharpening; }
 };

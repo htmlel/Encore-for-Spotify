@@ -859,5 +859,7 @@ void ui_set_progress(int elapsed_sec, int total_sec) {
 void ui_set_playing(bool playing) { (void)playing; }
 void ui_refresh(void) {}
 UiHit ui_hit(GPoint tap) { (void)tap; return UI_HIT_NONE; }
+void ui_wake(void) {}
+bool ui_controls_shown(void) { return true; }
 
 #endif  // !PBL_PLATFORM_EMERY
