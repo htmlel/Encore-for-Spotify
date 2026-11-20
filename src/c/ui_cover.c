@@ -267,7 +267,7 @@ static void draw_heart(GContext *ctx) {
   // and white (with a thin black edge) where it is dark. The middle is red
   // when the song is liked; otherwise the cover shows through.
   const bool on_light = strip_is_light(HEART_CX - 16, HEART_CX + 16, HEART_CY - 12, HEART_CY + 16);
-  heart_draw(ctx, GPoint(HEART_CX, HEART_CY + 2), 10, 3, on_light ? GColorBlack : GColorWhite,
+  heart_draw(ctx, GPoint(HEART_CX, HEART_CY + 2), 14, 3, on_light ? GColorBlack : GColorWhite,
              !on_light, liked, GColorRed);
 }
 

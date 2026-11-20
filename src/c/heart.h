@@ -3,7 +3,7 @@
 
 // Draws a heart outline whose line is the same thickness all the way round,
 // straight into the screen's pixels, centered on `center`.
-//   scale:     size; the heart is about 2.3 * scale wide
+//   scale:     the width of the whole heart is twice this, in pixels
 //   thickness: of the line, in pixels
 //   line:      the line's color
 //   edged:     a one-pixel black edge around the outside, for busy pictures

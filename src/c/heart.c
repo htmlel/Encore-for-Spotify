@@ -1,9 +1,9 @@
 #include "heart.h"
 
-// The heart is the classic curve (x^2 + y^2 - 1)^3 = x^2 y^3. Each pixel of
-// a small grid is marked as edge, line or middle: the line is every pixel of
-// the heart within `thickness` of its outside, which is what keeps the line
-// the same thickness everywhere, lobes, notch and point alike.
+// The heart is two round lobes over a point with straight sides. Each pixel
+// of a small grid is marked as edge, line or middle: the line is every pixel
+// of the heart within `thickness` of its outside, which is what keeps the
+// line the same thickness everywhere, lobes, notch and point alike.
 #define GRID 44
 #define HALF (GRID / 2)
 
@@ -14,11 +14,18 @@ static int s_grid_scale = -1;
 static int s_grid_thickness = -1;
 
 static bool in_heart(int gx, int gy, int scale) {
-  const int64_t x = gx - HALF;
-  // Up is positive for the curve; lowered a little so it sits centered.
-  const int64_t y = (HALF - gy) + scale / 8;
-  const int64_t a = x * x + y * y - (int64_t)scale * scale;
-  return a * a * a - (int64_t)scale * x * x * y * y * y <= 0;
+  // Worked in half pixels, in which `scale` is the radius of one lobe.
+  const int32_t x = 2 * (gx - HALF);
+  const int32_t ax = x < 0 ? -x : x;
+  // Raised so that the whole heart, lobes to point, sits centered.
+  const int32_t y = 2 * (gy - HALF) + scale * 7 / 10;
+  // The two round lobes, side by side and touching in the middle.
+  if ((ax - scale) * (ax - scale) + y * y <= scale * scale) {
+    return true;
+  }
+  // The lower part: straight sides running at 45 degrees from where they
+  // touch the lobes down to the point.
+  return y >= 0 && y >= ax - scale && (ax + y) * 1000 <= scale * 2414;
 }
 
 static void build(int scale, int thickness) {
