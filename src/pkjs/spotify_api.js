@@ -77,6 +77,8 @@ function apiRequest(method, path, body, callback) {
 // has played for a while there is none, and Spotify answers 404. In that
 // case this picks one of the devices that are on (the phone, a speaker) and
 // starts there; if none is on at all, it says so.
+var deviceChosenHook = null;  // told which device was picked, so the watch can say
+
 function playRequest(method, path, body, callback) {
   apiRequest(method, path, body, function(err, data) {
     if (!err || err.message !== 'API error 404') {
@@ -91,13 +93,23 @@ function playRequest(method, path, body, callback) {
         if (callback) callback(new Error('Open Spotify on your phone first'), null);
         return;
       }
+      // The phone first: it is the one the wearer has with them.
+      var chosen = devices[0];
+      for (var i = 0; i < devices.length; i++) {
+        if (devices[i].type === 'Smartphone') { chosen = devices[i]; break; }
+      }
       var sep = path.indexOf('?') === -1 ? '?' : '&';
-      apiRequest(method, path + sep + 'device_id=' + encodeURIComponent(devices[0].id), body, callback);
+      apiRequest(method, path + sep + 'device_id=' + encodeURIComponent(chosen.id), body, function(err3, data3) {
+        if (!err3 && deviceChosenHook) deviceChosenHook(chosen.name || 'device', chosen.volume_percent);
+        if (callback) callback(err3, data3);
+      });
     });
   });
 }
 
 module.exports = {
+  onDeviceChosen: function(fn) { deviceChosenHook = fn; },
+
   getCurrentPlayback: function(cb) {
     // additional_types=episode so /me/player returns podcast episodes in
     // `item` instead of nulling it out. Without this, the watch has no

@@ -112,6 +112,14 @@ function toggleLiked() {
 
 // --- Devices and search ---
 
+// When the music had to be started on a device picked for the wearer, say
+// which one, and warn if its volume is all the way down.
+api.onDeviceChosen(function(name, volume) {
+  var text = 'Playing on ' + name;
+  if (volume === 0) text += ' (volume is 0)';
+  Pebble.sendAppMessage({ 'StatusMsg': text }, null, null);
+});
+
 function formatDevices(data) {
   return (data.devices || []).filter(function(d) { return d && d.id && !d.is_restricted; })
     .map(function(d) {
