@@ -13,6 +13,7 @@
 #include "ui.h"
 #include "comm.h"
 #include "ui_looks.h"
+#include "heart.h"
 
 #if defined(PBL_PLATFORM_EMERY)
 
@@ -118,24 +119,6 @@ static void draw_cover(GContext *ctx) {
   graphics_fill_rect(ctx, GRect(cx - 2, cy - 22, 20, 7), 0, GCornerNone);
 }
 
-// A heart from two circles and a triangle, centered on (cx, cy).
-static void draw_heart_shape(GContext *ctx, int cx, int cy, int grow) {
-  const int r = 3 + grow;
-  graphics_fill_circle(ctx, GPoint(cx - 4, cy - 2), r);
-  graphics_fill_circle(ctx, GPoint(cx + 4, cy - 2), r);
-  // Close the gap the two circles leave between them.
-  graphics_fill_rect(ctx, GRect(cx - 2, cy - 3, 5, 4), 0, GCornerNone);
-  GPathInfo info = {
-      .num_points = 3,
-      .points = (GPoint[]){{-7 - grow, 0}, {7 + grow, 0}, {0, 8 + grow}},
-  };
-  GPath *path = gpath_create(&info);
-  if (path) {
-    gpath_move_to(path, GPoint(cx, cy));
-    gpath_draw_filled(ctx, path);
-    gpath_destroy(path);
-  }
-}
 
 static void draw_top(GContext *ctx) {
   graphics_context_set_text_color(ctx, GColorWhite);
@@ -143,12 +126,8 @@ static void draw_top(GContext *ctx) {
                      GRect(12, 2, 70, 22), GTextOverflowModeFill, GTextAlignmentLeft, NULL);
   // The heart: green when the song is liked, a white outline when not.
   const bool liked = comm_get_liked() == 1;
-  graphics_context_set_fill_color(ctx, liked ? COLOR_ACCENT : GColorWhite);
-  draw_heart_shape(ctx, HEART_CX, HEART_CY, 2);
-  if (!liked) {
-    graphics_context_set_fill_color(ctx, GColorBlack);
-    draw_heart_shape(ctx, HEART_CX, HEART_CY, 0);
-  }
+  heart_draw(ctx, GPoint(HEART_CX, HEART_CY), 8, 2, liked ? COLOR_ACCENT : GColorWhite, false,
+             liked, COLOR_ACCENT);
 }
 
 static void draw_text(GContext *ctx) {

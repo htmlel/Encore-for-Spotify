@@ -18,6 +18,7 @@
 #include "comm.h"
 #include "marquee.h"
 #include "ui_looks.h"
+#include "heart.h"
 
 #if defined(PBL_PLATFORM_EMERY)
 
@@ -223,31 +224,11 @@ static void draw_edged_text(GContext *ctx, const char *text, GFont font, GRect r
   graphics_draw_text(ctx, text, font, r, GTextOverflowModeFill, align, NULL);
 }
 
-// A heart from two circles and a triangle, centered on (cx, cy).
-static void draw_heart_shape(GContext *ctx, int cx, int cy, int grow) {
-  const int r = 3 + grow;
-  graphics_fill_circle(ctx, GPoint(cx - 4, cy - 2), r);
-  graphics_fill_circle(ctx, GPoint(cx + 4, cy - 2), r);
-  // Close the gap the two circles leave between them.
-  graphics_fill_rect(ctx, GRect(cx - 2, cy - 3, 5, 4), 0, GCornerNone);
-  GPathInfo info = {
-      .num_points = 3,
-      .points = (GPoint[]){{-7 - grow, 0}, {7 + grow, 0}, {0, 8 + grow}},
-  };
-  GPath *path = gpath_create(&info);
-  if (path) {
-    gpath_move_to(path, GPoint(cx, cy));
-    gpath_draw_filled(ctx, path);
-    gpath_destroy(path);
-  }
-}
 
-// The time and heart are drawn over the top strip of the cover, and stay at
-// full strength whether or not the controls are showing. A copy of the strip
-// from before they were drawn lets the middle of an unliked heart be put
-// back afterwards, so the cover shows through it.
+// The time and heart are drawn over the top strip of the cover. A copy of
+// the strip from before they were drawn tells how light the cover is behind
+// each of them.
 #define TOP_STRIP_H 44
-#define SEE_THROUGH GColorMagentaARGB8   // stands in for "cover shows here"
 static uint8_t s_top_strip[TOP_STRIP_H * SCREEN_W];
 
 static void save_top_strip(GContext *ctx) {
@@ -280,42 +261,14 @@ static bool strip_is_light(int x0, int x1, int y0, int y1) {
   return n > 0 && sum > n * 17;  // of 30 for white
 }
 
-static void finish_top_strip(GContext *ctx) {
-  GBitmap *fb = graphics_capture_frame_buffer(ctx);
-  if (!fb) {
-    return;
-  }
-  for (int y = 0; y < TOP_STRIP_H; y++) {
-    const GBitmapDataRowInfo row = gbitmap_get_data_row_info(fb, y);
-    for (int x = row.min_x; x <= row.max_x && x < SCREEN_W; x++) {
-      const uint8_t before = s_top_strip[y * SCREEN_W + x];
-      const bool in_heart = x > HEART_CX - 18 && x < HEART_CX + 18;
-      if (in_heart && row.data[x] == SEE_THROUGH) {
-        row.data[x] = before;
-      }
-    }
-  }
-  graphics_release_frame_buffer(ctx, fb);
-}
-
 static void draw_heart(GContext *ctx) {
   const bool liked = comm_get_liked() == 1;
   // Straight on the cover: one solid band, black where the cover is light
   // and white (with a thin black edge) where it is dark. The middle is red
   // when the song is liked; otherwise the cover shows through.
   const bool on_light = strip_is_light(HEART_CX - 16, HEART_CX + 16, HEART_CY - 12, HEART_CY + 16);
-  if (!on_light) {
-    graphics_context_set_fill_color(ctx, GColorBlack);
-    draw_heart_shape(ctx, HEART_CX, HEART_CY, 5);
-  }
-  graphics_context_set_fill_color(ctx, on_light ? GColorBlack : GColorWhite);
-  draw_heart_shape(ctx, HEART_CX, HEART_CY, 4);
-  // Hard edges here, so every pixel of the middle is exactly the stand-in
-  // color that finish_top_strip() looks for.
-  graphics_context_set_antialiased(ctx, false);
-  graphics_context_set_fill_color(ctx, liked ? GColorRed : (GColor){.argb = SEE_THROUGH});
-  draw_heart_shape(ctx, HEART_CX, HEART_CY, 1);
-  graphics_context_set_antialiased(ctx, true);
+  heart_draw(ctx, GPoint(HEART_CX, HEART_CY + 2), 10, 3, on_light ? GColorBlack : GColorWhite,
+             !on_light, liked, GColorRed);
 }
 
 // The time, and shuffle and repeat when they are on, over the top of the cover.
@@ -430,7 +383,6 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   save_top_strip(ctx);
   draw_bar(ctx);
   draw_heart(ctx);
-  finish_top_strip(ctx);
   // The text and buttons come and go halfway through the fade.
   if (s_controls >= 8) {
     draw_text_and_progress(ctx);
