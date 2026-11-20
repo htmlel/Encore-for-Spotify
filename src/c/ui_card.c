@@ -139,7 +139,7 @@ static void draw_heart_shape(GContext *ctx, int cx, int cy, int grow) {
 static void draw_top(GContext *ctx) {
   graphics_context_set_text_color(ctx, GColorWhite);
   graphics_draw_text(ctx, s_clock, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                     GRect(12, 2, 70, 22), GTextOverflowModeFill, GTextAlignmentLeft, NULL);
+                     GRect(12, 5, 70, 22), GTextOverflowModeFill, GTextAlignmentLeft, NULL);
   if (s_repeat) {
     graphics_context_set_text_color(ctx, COLOR_ACCENT);
     graphics_draw_text(ctx, s_repeat == 2 ? "REPEAT 1" : "REPEAT",

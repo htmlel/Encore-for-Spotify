@@ -226,7 +226,7 @@ static void draw_heart(GContext *ctx) {
 // The time, and shuffle and repeat when they are on, over the top of the cover.
 static void draw_bar(GContext *ctx) {
   draw_edged_text(ctx, s_clock, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                  GRect(12, 4, 60, 22), GTextAlignmentLeft);
+                  GRect(12, 9, 60, 22), GTextAlignmentLeft);  // level with the heart
   char modes[20] = "";
   if (s_shuffle) {
     strcat(modes, "SHUF");
@@ -237,7 +237,7 @@ static void draw_bar(GContext *ctx) {
   }
   if (modes[0]) {
     draw_edged_text(ctx, modes, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                    GRect(60, 8, 90, 18), GTextAlignmentCenter);
+                    GRect(60, 12, 90, 18), GTextAlignmentCenter);
   }
 }
 
