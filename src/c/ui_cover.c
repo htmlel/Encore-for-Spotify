@@ -36,7 +36,7 @@
 #define BUTTON_ICON_Y 214
 
 #define HEART_CX 170   // in from the screen's rounded corner
-#define HEART_CY 6
+#define HEART_CY 7
 
 static Layer *s_canvas;
 static MarqueeLayer *s_title_layer;
@@ -322,7 +322,7 @@ static void draw_heart(GContext *ctx) {
   const bool liked = comm_get_liked() == 1;
   // A white band; the middle is red when the song is liked, and otherwise
   // the cover shows through.
-  heart_draw(ctx, GPoint(HEART_CX, HEART_CY + 2), 8, 2, (GColor){.argb = INK_WHITE}, false, true,
+  heart_draw(ctx, GPoint(HEART_CX, HEART_CY + 2), 10, 2, (GColor){.argb = INK_WHITE}, false, true,
              (GColor){.argb = liked ? INK_RED : INK_HOLE});
 }
 
