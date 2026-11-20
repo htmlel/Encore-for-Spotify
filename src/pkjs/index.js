@@ -57,6 +57,8 @@ function sendAuthStatus() {
   Pebble.sendAppMessage({ 'AuthStatus': authed }, null, null);
 }
 
+var playPauseBusy = false;  // a play/pause request is on its way
+
 // --- Liked Songs ---
 
 var likedUri = null;     // the song the state below is about
@@ -78,7 +80,10 @@ function refreshLiked(uri, then) {
   });
 }
 
+var likeBusy = false;  // a like/unlike request is on its way
+
 function toggleLiked() {
+  if (likeBusy) return;
   var uri = likedUri;
   if (!uri) {
     sendError('No song playing');
@@ -89,7 +94,9 @@ function toggleLiked() {
       sendError('Could not check Liked Songs');
       return;
     }
+    likeBusy = true;
     api.setSaved(uri, !current, function(err) {
+      likeBusy = false;
       if (err) {
         sendError('Like: ' + err.message);
         // Put the watch back to what is true.
@@ -512,16 +519,23 @@ function handleCommand(cmd, context) {
       fetchAndSendList(5, api.getQueue, formatQueue);
       break;
     case 10: // CMD_PLAY_PAUSE
+      // One at a time: quick repeated taps would otherwise ask Spotify to
+      // pause what is already paused, which it refuses with a 403.
+      if (playPauseBusy) break;
+      playPauseBusy = true;
       api.getCurrentPlayback(function(err, data) {
-        if (err) { sendError(err.message); return; }
+        var done = function(playErr) {
+          playPauseBusy = false;
+          // A 403 here means it was already in that state: nothing to report.
+          if (playErr && playErr.message !== 'API error 403') sendError(playErr.message);
+          setTimeout(fetchNowPlaying, 300);
+        };
+        if (err) { playPauseBusy = false; sendError(err.message); return; }
         startPolling();
         if (data && data.is_playing) {
-          api.pause(function() { setTimeout(fetchNowPlaying, 300); });
+          api.pause(done);
         } else {
-          api.play(function(playErr) {
-            if (playErr) sendError(playErr.message);
-            setTimeout(fetchNowPlaying, 300);
-          });
+          api.play(done);
         }
       });
       break;

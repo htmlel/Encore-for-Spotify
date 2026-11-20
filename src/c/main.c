@@ -264,7 +264,20 @@ static void np_click_config_provider(void *context) {
 #if HAS_TOUCH
 static void np_gesture(GestureKind kind, void *ctx) {
   switch (kind) {
-    case GESTURE_TAP:
+    case GESTURE_TAP: {
+      // A second tap right after the first is almost always a bounce, and
+      // would undo what the first one did.
+      static time_t s_last_tap_s;
+      static uint16_t s_last_tap_ms;
+      time_t now_s;
+      uint16_t now_ms;
+      time_ms(&now_s, &now_ms);
+      const int32_t since = (int32_t)(now_s - s_last_tap_s) * 1000 + (int32_t)now_ms - s_last_tap_ms;
+      if (since >= 0 && since < 600) {
+        break;
+      }
+      s_last_tap_s = now_s;
+      s_last_tap_ms = now_ms;
       switch (ui_hit(touch_input_last_tap())) {
         case UI_HIT_HEART:
           comm_send_command(CMD_TOGGLE_LIKE, NULL);
@@ -293,6 +306,7 @@ static void np_gesture(GestureKind kind, void *ctx) {
 #endif
       }
       break;
+    }
     case GESTURE_SWIPE_LEFT:
       // Right-to-left = next track (matches phone music apps).
       np_down_click(NULL, NULL);
