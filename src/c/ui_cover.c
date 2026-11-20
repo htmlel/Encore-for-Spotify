@@ -35,8 +35,11 @@
 #define BUTTONS_Y 184       // touch buttons take the strip from here down
 #define BUTTON_ICON_Y 214
 
-#define HEART_CX 170   // in from the screen's rounded corner
-#define HEART_CY 7
+// The heart sits to the right of the song name and artist, and comes and
+// goes with them.
+#define HEART_CX 181
+#define HEART_CY 148
+#define TEXT_SIDE 32        // kept clear on both sides of the name, so it stays centered
 
 static Layer *s_canvas;
 static MarqueeLayer *s_title_layer;
@@ -219,7 +222,7 @@ static void draw_cover(GContext *ctx) {
   graphics_fill_rect(ctx, GRect(cx - 1, cy - 30, 26, 10), 0, GCornerNone);
 }
 
-// The time and heart are always white, in the strip along the top, with a
+// The time is always white, in the strip along the top, with a
 // thin dark line around them so they read on a white cover too.
 //
 // They are first drawn in stand-in colors no cover pixel has (any that did
@@ -320,29 +323,25 @@ static void finish_top_strip(GContext *ctx) {
 
 static void draw_heart(GContext *ctx) {
   const bool liked = comm_get_liked() == 1;
-  // A white band; the middle is red when the song is liked, and otherwise
-  // the cover shows through.
-  heart_draw(ctx, GPoint(HEART_CX, HEART_CY + 2), 10, 2, (GColor){.argb = INK_WHITE}, false, true,
-             (GColor){.argb = liked ? INK_RED : INK_HOLE});
+  // A white band on the darkened part of the cover; the middle is red when
+  // the song is liked, and otherwise the cover shows through.
+  heart_draw(ctx, GPoint(HEART_CX, HEART_CY), 10, 2, GColorWhite, true, liked, GColorRed);
 }
 
-// The time, and shuffle and repeat when they are on, over the top of the cover.
+// Along the top: the time in the middle, with shuffle to its left and repeat
+// to its right when they are on.
 static void draw_bar(GContext *ctx) {
   graphics_context_set_text_color(ctx, (GColor){.argb = INK_WHITE});
   graphics_draw_text(ctx, s_clock, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                     GRect(12, -5, 60, 22),  // level with the heart
-                     GTextOverflowModeFill, GTextAlignmentLeft, NULL);
-  char modes[20] = "";
+                     GRect(60, -5, 80, 22), GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+  GFont small = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
   if (s_shuffle) {
-    strcat(modes, "SHUF");
+    graphics_draw_text(ctx, "SHUF", small, GRect(12, -3, 50, 18), GTextOverflowModeFill,
+                       GTextAlignmentLeft, NULL);
   }
   if (s_repeat) {
-    strcat(modes, modes[0] ? "  " : "");
-    strcat(modes, s_repeat == 2 ? "RPT 1" : "RPT");
-  }
-  if (modes[0]) {
-    graphics_draw_text(ctx, modes, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                       GRect(60, -3, 90, 18), GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+    graphics_draw_text(ctx, s_repeat == 2 ? "RPT 1" : "RPT", small, GRect(138, -3, 50, 18),
+                       GTextOverflowModeFill, GTextAlignmentRight, NULL);
   }
 }
 
@@ -356,7 +355,7 @@ static void format_time(char *out, size_t size, int32_t sec, bool minus) {
 static void draw_text_and_progress(GContext *ctx) {
   graphics_context_set_text_color(ctx, GColorWhite);
   graphics_draw_text(ctx, s_artist, fonts_get_system_font(FONT_KEY_GOTHIC_18),
-                     GRect(8, ARTIST_Y, 184, 22), GTextOverflowModeTrailingEllipsis,
+                     GRect(TEXT_SIDE, ARTIST_Y, SCREEN_W - 2 * TEXT_SIDE, 22), GTextOverflowModeTrailingEllipsis,
                      GTextAlignmentCenter, NULL);
 
   const char *device = comm_get_device_name();
@@ -437,11 +436,11 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   draw_cover(ctx);
   prepare_top_strip(ctx);
   draw_bar(ctx);
-  draw_heart(ctx);
   finish_top_strip(ctx);
-  // The text and buttons come and go halfway through the fade.
+  // The text, heart and buttons come and go halfway through the fade.
   if (s_controls >= 8) {
     draw_text_and_progress(ctx);
+    draw_heart(ctx);
     draw_buttons(ctx);
   }
 }
@@ -536,7 +535,7 @@ void cover_init(Window *window) {
   layer_set_update_proc(s_canvas, canvas_update);
   layer_add_child(root, s_canvas);
 
-  s_title_layer = marquee_layer_create(GRect(8, TITLE_Y, bounds.size.w - 16, 30));
+  s_title_layer = marquee_layer_create(GRect(TEXT_SIDE, TITLE_Y, bounds.size.w - 2 * TEXT_SIDE, 30));
   if (s_title_layer) {
     marquee_layer_set_font(s_title_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
     marquee_layer_set_text_color(s_title_layer, GColorWhite);
@@ -673,7 +672,7 @@ UiHit cover_hit(GPoint p) {
     return p.x < 67 ? UI_HIT_PREV : p.x < 134 ? UI_HIT_PLAY_PAUSE : UI_HIT_NEXT;
   }
   // The heart, with room around it for a fingertip.
-  if (p.x >= SCREEN_W - 70 && p.y < 50) {
+  if (p.x >= SCREEN_W - 2 * TEXT_SIDE && p.y >= TITLE_Y - 4 && p.y < DEVICE_Y + 6) {
     return UI_HIT_HEART;
   }
   // The clear part of the cover plays and pauses.
