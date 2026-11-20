@@ -1,3 +1,4 @@
+#include "ui.h"
 #include "comm.h"
 
 static CommCallbacks s_callbacks;
@@ -392,10 +393,21 @@ static void handle_auth_status(DictionaryIterator *iter) {
 static int s_liked = 2;
 int comm_get_liked(void) { return s_liked; }
 
+// The device the music is playing on, "" when not known.
+static char s_device_name[40];
+const char *comm_get_device_name(void) { return s_device_name; }
+
 static void inbox_received_handler(DictionaryIterator *iter, void *context) {
   Tuple *liked_t = dict_find(iter, MESSAGE_KEY_LikedState);
   if (liked_t) {
     s_liked = (int)liked_t->value->int32;
+    ui_refresh();
+  }
+  Tuple *device_t = dict_find(iter, MESSAGE_KEY_DeviceName);
+  if (device_t && device_t->type == TUPLE_CSTRING) {
+    strncpy(s_device_name, device_t->value->cstring, sizeof(s_device_name) - 1);
+    s_device_name[sizeof(s_device_name) - 1] = '\0';
+    ui_refresh();
   }
 
   // JS ready signal

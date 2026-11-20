@@ -122,6 +122,7 @@ static void track_info_cb(const char *title, const char *artist,
   // Update Now Playing UI (no-ops if window not showing)
   APP_LOG(APP_LOG_LEVEL_DEBUG, "track_info_cb: ui update");
   ui_set_track_info(title, artist);
+  ui_set_playing(is_playing);
   ui_set_progress(elapsed, duration);
   ui_set_shuffle(shuffle);
   ui_set_repeat(repeat_state);
@@ -264,7 +265,33 @@ static void np_click_config_provider(void *context) {
 static void np_gesture(GestureKind kind, void *ctx) {
   switch (kind) {
     case GESTURE_TAP:
-      np_select_click(NULL, NULL);
+      switch (ui_hit(touch_input_last_tap())) {
+        case UI_HIT_HEART:
+          comm_send_command(CMD_TOGGLE_LIKE, NULL);
+          break;
+        case UI_HIT_PREV:
+          np_up_click(NULL, NULL);
+          break;
+        case UI_HIT_NEXT:
+          np_down_click(NULL, NULL);
+          break;
+        case UI_HIT_PLAY_PAUSE:
+        case UI_HIT_RECORD:
+          // Shown at once; the next report from Spotify confirms it.
+          s_playing = !s_playing;
+          ui_set_playing(s_playing);
+          stop_ticking();
+          start_ticking();
+          comm_send_command(CMD_PLAY_PAUSE, NULL);
+          break;
+        case UI_HIT_NONE:
+#if defined(PBL_PLATFORM_EMERY)
+          break;
+#else
+          np_select_click(NULL, NULL);
+          break;
+#endif
+      }
       break;
     case GESTURE_SWIPE_LEFT:
       // Right-to-left = next track (matches phone music apps).
@@ -366,8 +393,48 @@ static void deinit(void) {
   comm_deinit();
 }
 
+#if defined(DEMO_NP)
+static GBitmap *s_demo_art;
+
+static void demo_now_playing(void) {
+  window_stack_pop_all(false);
+  // A cover drawn here: a sunset over the sea.
+  s_demo_art = gbitmap_create_blank(GSize(84, 84), GBitmapFormat8Bit);
+  if (s_demo_art) {
+    uint8_t *data = gbitmap_get_data(s_demo_art);
+    const int stride = gbitmap_get_bytes_per_row(s_demo_art);
+    for (int y = 0; y < 84; y++) {
+      for (int x = 0; x < 84; x++) {
+        const int dx = x - 42;
+        const int dy = y - 40;
+        uint8_t px;
+        if (dx * dx + dy * dy < 15 * 15 && y < 50) {
+          px = GColorYellowARGB8;
+        } else if (y < 22) {
+          px = GColorImperialPurpleARGB8;
+        } else if (y < 36) {
+          px = GColorFashionMagentaARGB8;
+        } else if (y < 50) {
+          px = GColorOrangeARGB8;
+        } else {
+          px = ((x + y * 3) % 9 < 2) ? GColorVividCeruleanARGB8 : GColorCobaltBlueARGB8;
+        }
+        data[y * stride + x] = px;
+      }
+    }
+  }
+  now_playing_window_push();
+  ui_set_album_art(s_demo_art);
+  track_info_cb("Golden Hour Drive", "The Night Owls", 215, 83, DEMO_NP != 2, DEMO_NP == 3, 0);
+}
+#endif
+
 int main(void) {
   init();
+#if defined(DEMO_NP)
+  // For a simulator picture of Now Playing: a made-up song and cover.
+  demo_now_playing();
+#endif
 #if defined(DEMO_NOTICE)
   // For a simulator picture of the notice.
   notice_show("Open Spotify on your phone first", true);

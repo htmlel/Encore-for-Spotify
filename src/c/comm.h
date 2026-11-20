@@ -28,6 +28,8 @@ void comm_send_command(AppCommand cmd, const char *context);
 bool comm_is_js_ready(void);
 // Whether the current song is in Liked Songs: 0 no, 1 yes, 2 not known.
 int comm_get_liked(void);
+// The device the music is playing on, "" when not known.
+const char *comm_get_device_name(void);
 // Returns the most recently received album art bitmap, or NULL if none
 // has been loaded yet. Used to repaint art into a freshly recreated
 // BitmapLayer when the Now Playing window is reopened.

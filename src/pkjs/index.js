@@ -236,7 +236,8 @@ function fetchNowPlaying() {
       'TrackElapsed': Math.floor((data.progress_ms || 0) / 1000),
       'TrackIsPlaying': data.is_playing ? 1 : 0,
       'ShuffleState': lastShuffleState ? 1 : 0,
-      'RepeatState': lastRepeatState
+      'RepeatState': lastRepeatState,
+      'DeviceName': String((data.device && data.device.name) || '').substring(0, 38)
     }, null, null);
 
     if (data.device) {

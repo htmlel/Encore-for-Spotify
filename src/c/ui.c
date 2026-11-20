@@ -1,4 +1,6 @@
 #include "ui.h"
+
+#if !defined(PBL_PLATFORM_EMERY)  // the Time 2 uses ui_record.c instead
 #include "comm.h"
 #include "marquee.h"
 
@@ -853,3 +855,9 @@ void ui_set_progress(int elapsed_sec, int total_sec) {
   }
 #endif
 }
+
+void ui_set_playing(bool playing) { (void)playing; }
+void ui_refresh(void) {}
+UiHit ui_hit(GPoint tap) { (void)tap; return UI_HIT_NONE; }
+
+#endif  // !PBL_PLATFORM_EMERY

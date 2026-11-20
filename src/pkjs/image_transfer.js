@@ -149,7 +149,8 @@ function processJpeg(jpegData, slot) {
     var W = 144, H = 106, isRound = false;
     try {
       var platform = Pebble.getActiveWatchInfo().platform || '';
-      if (platform === 'emery') { W = 200; H = 166; }
+      // The Time 2 shows the cover as a record label: a small square is all it needs.
+      if (platform === 'emery') { W = 84; H = 84; }
       else if (platform === 'gabbro') { W = 260; H = 260; isRound = true; }
       else if (platform === 'chalk') { W = 180; H = 180; isRound = true; }
       else if (platform === 'aplite') { W = 96; H = 96; }

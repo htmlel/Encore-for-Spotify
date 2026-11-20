@@ -41,3 +41,5 @@ int16_t touch_input_row_height(MenuLayer *menu, MenuIndex *index, void *context)
 // The row the last tap landed on, in a one-section menu with `header_h`
 // pixels of header and `num_rows` rows. False when it missed every row.
 bool touch_input_tap_row(MenuLayer *menu, int16_t header_h, uint16_t num_rows, MenuIndex *out);
+// Where the last tap landed, in screen coordinates.
+GPoint touch_input_last_tap(void);

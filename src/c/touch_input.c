@@ -110,6 +110,10 @@ static void touch_handler(const TouchEvent *event, void *context) {
   }
 }
 
+GPoint touch_input_last_tap(void) {
+  return s_tap;
+}
+
 int16_t touch_input_row_height(MenuLayer *menu, MenuIndex *index, void *context) {
   return TOUCH_ROW_H;
 }
@@ -175,6 +179,7 @@ void touch_input_set_handler(Window *win, GestureHandler handler, void *context)
   (void)win; (void)handler; (void)context;
 }
 void touch_input_clear_handler(Window *win) { (void)win; }
+GPoint touch_input_last_tap(void) { return GPointZero; }
 bool touch_input_tap_row(MenuLayer *menu, int16_t header_h, uint16_t num_rows, MenuIndex *out) {
   (void)menu; (void)header_h; (void)num_rows; (void)out;
   return false;
