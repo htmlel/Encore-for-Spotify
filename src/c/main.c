@@ -488,9 +488,14 @@ static void demo_now_playing(void) {
         uint8_t px;
         if (DEMO_NP == 6) {
           // A pale cover, to check the time and heart on a light picture.
-          px = (x > 40 && x < 150 && y > 50 && y < 160)
-                   ? ((x < 110 && y > 90) ? GColorPictonBlueARGB8 : GColorMelonARGB8)
-                   : GColorPastelYellowARGB8;
+          // Dark lettering along the top, as covers with a title have.
+          if (y > 6 && y < 14 && x > 20 && x < 180 && (x / 5) % 3 != 0) {
+            px = GColorBulgarianRoseARGB8;
+          } else {
+            px = (x > 40 && x < 150 && y > 50 && y < 160)
+                     ? ((x < 110 && y > 90) ? GColorPictonBlueARGB8 : GColorMelonARGB8)
+                     : GColorPastelYellowARGB8;
+          }
         } else if (dx * dx + dy * dy < 34 * 34 && y < 96) {
           px = GColorYellowARGB8;
         } else if (y < 36) {
