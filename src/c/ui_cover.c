@@ -36,7 +36,7 @@
 #define BUTTON_ICON_Y 214
 
 #define HEART_CX 170   // in from the screen's rounded corner
-#define HEART_CY 12
+#define HEART_CY 6
 
 static Layer *s_canvas;
 static MarqueeLayer *s_title_layer;
@@ -153,36 +153,23 @@ static void darken_lower_half(GContext *ctx) {
 }
 
 // The screen is 28 pixels taller than a square cover. The whole cover is
-// drawn against the bottom of the screen, nothing cropped, and the strip
-// above it, where the time and heart sit, is made up from the cover's own
-// top edge: the edge is carried upward and smoothed out more and more the
-// further it gets from the cover. A plain border simply continues; a busy
-// edge melts into its own colors. Works for the quick preview and the full
-// cover alike.
-#define COVER_TOP (SCREEN_H - SCREEN_W)
+// drawn in the middle, nothing cropped, and the 14-pixel strips above and
+// below it are made up from the cover's own edges: each edge is carried
+// outward and smoothed out more and more the further it gets from the
+// cover. A plain border simply continues; a busy edge melts into its own
+// colors. Works for the quick preview and the full cover alike.
+#define COVER_TOP ((SCREEN_H - SCREEN_W) / 2)
 
-static void draw_cover_filling(GContext *ctx, GBitmap *bmp) {
+// Fills screen rows first_y..last_y from the cover's edge rows starting at
+// cover row edge_y (three rows, going `step` further in each time).
+// `near_y` is the screen row touching the cover.
+static void grow_edge(GBitmap *fb, GBitmap *bmp, int edge_y, int step, int first_y, int last_y,
+                      int near_y) {
   const GRect b = gbitmap_get_bounds(bmp);
-  if (gbitmap_get_format(bmp) != GBitmapFormat8Bit || b.size.w <= 0 || b.size.h <= 0) {
-    return;
-  }
   const uint8_t *src = gbitmap_get_data(bmp);
   const int stride = gbitmap_get_bytes_per_row(bmp);
-  GBitmap *fb = graphics_capture_frame_buffer(ctx);
-  if (!fb) {
-    return;
-  }
-  for (int y = COVER_TOP; y < SCREEN_H; y++) {
-    const GBitmapDataRowInfo row = gbitmap_get_data_row_info(fb, y);
-    const uint8_t *line = src + ((y - COVER_TOP) * b.size.h / SCREEN_W) * stride;
-    for (int x = row.min_x; x <= row.max_x && x < SCREEN_W; x++) {
-      row.data[x] = line[x * b.size.w / SCREEN_W];
-    }
-  }
-
-  // The cover's top edge across the screen, as running totals of each color
-  // channel (taken over its first three rows), so that the average over any
-  // stretch of it is one subtraction.
+  // The edge across the screen, as running totals of each color channel, so
+  // that the average over any stretch of it is one subtraction.
   static uint16_t total[3][SCREEN_W + 1];
   for (int ch = 0; ch < 3; ch++) {
     total[ch][0] = 0;
@@ -191,7 +178,7 @@ static void draw_cover_filling(GContext *ctx, GBitmap *bmp) {
     const int sx = x * b.size.w / SCREEN_W;
     int sum[3] = {0, 0, 0};
     for (int r = 0; r < 3; r++) {
-      const uint8_t c = src[(r * b.size.h / SCREEN_W) * stride + sx];
+      const uint8_t c = src[((edge_y + r * step) * b.size.h / SCREEN_W) * stride + sx];
       sum[0] += (c >> 4) & 3;
       sum[1] += (c >> 2) & 3;
       sum[2] += c & 3;
@@ -203,10 +190,11 @@ static void draw_cover_filling(GContext *ctx, GBitmap *bmp) {
   // A 4x4 pattern for turning in-between shades into dots of the screen's
   // own colors.
   static const uint8_t pattern[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
-  for (int y = 0; y < COVER_TOP; y++) {
+  for (int y = first_y; y <= last_y; y++) {
     const GBitmapDataRowInfo row = gbitmap_get_data_row_info(fb, y);
     // Smoothed over a wider stretch the further from the cover.
-    const int reach = 1 + (COVER_TOP - y) * 2;
+    const int away = y > near_y ? y - near_y : near_y - y;
+    const int reach = 2 + away * 3;
     for (int x = row.min_x; x <= row.max_x && x < SCREEN_W; x++) {
       const int from = x - reach < 0 ? 0 : x - reach;
       const int to = x + reach + 1 > SCREEN_W ? SCREEN_W : x + reach + 1;
@@ -225,6 +213,28 @@ static void draw_cover_filling(GContext *ctx, GBitmap *bmp) {
       row.data[x] = out;
     }
   }
+}
+
+static void draw_cover_filling(GContext *ctx, GBitmap *bmp) {
+  const GRect b = gbitmap_get_bounds(bmp);
+  if (gbitmap_get_format(bmp) != GBitmapFormat8Bit || b.size.w <= 0 || b.size.h <= 0) {
+    return;
+  }
+  const uint8_t *src = gbitmap_get_data(bmp);
+  const int stride = gbitmap_get_bytes_per_row(bmp);
+  GBitmap *fb = graphics_capture_frame_buffer(ctx);
+  if (!fb) {
+    return;
+  }
+  for (int y = COVER_TOP; y < COVER_TOP + SCREEN_W; y++) {
+    const GBitmapDataRowInfo row = gbitmap_get_data_row_info(fb, y);
+    const uint8_t *line = src + ((y - COVER_TOP) * b.size.h / SCREEN_W) * stride;
+    for (int x = row.min_x; x <= row.max_x && x < SCREEN_W; x++) {
+      row.data[x] = line[x * b.size.w / SCREEN_W];
+    }
+  }
+  grow_edge(fb, bmp, 0, 1, 0, COVER_TOP - 1, COVER_TOP - 1);
+  grow_edge(fb, bmp, SCREEN_W - 1, -1, COVER_TOP + SCREEN_W, SCREEN_H - 1, COVER_TOP + SCREEN_W);
   graphics_release_frame_buffer(ctx, fb);
 }
 
@@ -243,14 +253,14 @@ static void draw_cover(GContext *ctx) {
   graphics_fill_rect(ctx, GRect(cx - 1, cy - 30, 26, 10), 0, GCornerNone);
 }
 
-// The time and heart are always white, in the strip above the cover, with a
+// The time and heart are always white, in the strip along the top, with a
 // thin dark line around them so they read on a white cover too.
 //
 // They are first drawn in stand-in colors no cover pixel has (any that did
 // are nudged to a neighboring color first), so that afterwards every pixel
 // of them can be found, the dark line laid around them, and the stand-ins
 // turned into the real white and red.
-#define TOP_STRIP_H 32
+#define TOP_STRIP_H 24
 #define INK_WHITE GColorMagentaARGB8
 #define INK_RED GColorShockingPinkARGB8
 #define INK_HOLE GColorRichBrilliantLavenderARGB8   // the middle of an unliked heart
@@ -346,7 +356,7 @@ static void draw_heart(GContext *ctx) {
   const bool liked = comm_get_liked() == 1;
   // A white band; the middle is red when the song is liked, and otherwise
   // the cover shows through.
-  heart_draw(ctx, GPoint(HEART_CX, HEART_CY + 2), 14, 3, (GColor){.argb = INK_WHITE}, false, true,
+  heart_draw(ctx, GPoint(HEART_CX, HEART_CY + 2), 8, 2, (GColor){.argb = INK_WHITE}, false, true,
              (GColor){.argb = liked ? INK_RED : INK_HOLE});
 }
 
@@ -354,7 +364,7 @@ static void draw_heart(GContext *ctx) {
 static void draw_bar(GContext *ctx) {
   graphics_context_set_text_color(ctx, (GColor){.argb = INK_WHITE});
   graphics_draw_text(ctx, s_clock, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                     GRect(12, 1, 60, 22),  // level with the heart
+                     GRect(12, -5, 60, 22),  // level with the heart
                      GTextOverflowModeFill, GTextAlignmentLeft, NULL);
   char modes[20] = "";
   if (s_shuffle) {
@@ -366,7 +376,7 @@ static void draw_bar(GContext *ctx) {
   }
   if (modes[0]) {
     graphics_draw_text(ctx, modes, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                       GRect(60, 4, 90, 18), GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+                       GRect(60, -3, 90, 18), GTextOverflowModeFill, GTextAlignmentCenter, NULL);
   }
 }
 
