@@ -21,7 +21,7 @@ static MenuLayer *s_about_menu;
 // Aplite also has no NP long-press feature, so no "Long Press" row.
 #define NUM_ABOUT_ROWS 2
 #else
-#define NUM_ABOUT_ROWS 4
+#define NUM_ABOUT_ROWS 5
 #endif
 
 static void tutorial_restart_done(void) {
@@ -36,7 +36,7 @@ static void about_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, voi
 #if defined(PBL_PLATFORM_APLITE)
   switch (idx->row) {
     case 0:
-      menu_cell_basic_draw(ctx, cell, "Author", "alex_pavlov", NULL);
+      menu_cell_basic_draw(ctx, cell, "Author", "htmlel", NULL);
       break;
     case 1:
       menu_cell_basic_draw(ctx, cell, "Version", APP_VERSION, NULL);
@@ -48,7 +48,7 @@ static void about_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, voi
       menu_cell_basic_draw(ctx, cell, "Tutorial", "View controls guide", NULL);
       break;
     case 1:
-      menu_cell_basic_draw(ctx, cell, "Author", "alex_pavlov", NULL);
+      menu_cell_basic_draw(ctx, cell, "Author", "htmlel", NULL);
       break;
     case 2:
       menu_cell_basic_draw(ctx, cell, "Long press UP/DOWN",
@@ -56,6 +56,10 @@ static void about_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, voi
       break;
     case 3:
       menu_cell_basic_draw(ctx, cell, "Version", APP_VERSION, NULL);
+      break;
+    case 4:
+      // Credit for the app this one grew out of.
+      menu_cell_basic_draw(ctx, cell, "Based on", "Playback by alex_pavlov", NULL);
       break;
   }
 #endif
