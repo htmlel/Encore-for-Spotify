@@ -141,19 +141,6 @@ static void draw_top(GContext *ctx) {
   graphics_context_set_text_color(ctx, GColorWhite);
   graphics_draw_text(ctx, s_clock, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                      GRect(12, 2, 70, 22), GTextOverflowModeFill, GTextAlignmentLeft, NULL);
-  // Whichever of shuffle and repeat is on but not on the button just now is
-  // named up here, so neither is ever switched on out of sight.
-  const char *also = NULL;
-  if (s_mode_is_repeat && s_shuffle) {
-    also = "SHUFFLE";
-  } else if (!s_mode_is_repeat && s_repeat) {
-    also = s_repeat == 2 ? "REPEAT 1" : "REPEAT";
-  }
-  if (also) {
-    graphics_context_set_text_color(ctx, COLOR_ACCENT);
-    graphics_draw_text(ctx, also, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                       GRect(60, 4, 90, 18), GTextOverflowModeFill, GTextAlignmentCenter, NULL);
-  }
   // The heart: green when the song is liked, a white outline when not.
   const bool liked = comm_get_liked() == 1;
   graphics_context_set_fill_color(ctx, liked ? COLOR_ACCENT : GColorWhite);
@@ -258,32 +245,47 @@ static void draw_shuffle_sign(GContext *ctx, int cx, int cy, int scale, GColor c
 
 static void draw_repeat_sign(GContext *ctx, int cx, int cy, int scale, GColor color, bool one) {
   #define SX(dx) (cx + (dx) * scale / 16)
-  const int top = cy - 6;
-  const int bottom = cy + 6;
+  const int top = cy - 5;
+  const int bottom = cy + 5;
   graphics_context_set_stroke_color(ctx, color);
   graphics_context_set_stroke_width(ctx, 2);
-  // A loop: along the top to the right, down, back along the bottom, up,
-  // with an arrowhead on each run.
-  graphics_draw_line(ctx, GPoint(SX(-9), top), GPoint(SX(9), top));
-  graphics_draw_line(ctx, GPoint(SX(11), top + 2), GPoint(SX(11), bottom - 2));
-  graphics_draw_line(ctx, GPoint(SX(9), bottom), GPoint(SX(-9), bottom));
-  graphics_draw_line(ctx, GPoint(SX(-11), bottom - 2), GPoint(SX(-11), top + 2));
-  graphics_draw_line(ctx, GPoint(SX(9), top), GPoint(SX(11), top + 2));
-  graphics_draw_line(ctx, GPoint(SX(11), bottom - 2), GPoint(SX(9), bottom));
-  graphics_draw_line(ctx, GPoint(SX(-9), bottom), GPoint(SX(-11), bottom - 2));
-  graphics_draw_line(ctx, GPoint(SX(-11), top + 2), GPoint(SX(-9), top));
   graphics_context_set_fill_color(ctx, color);
-  const int head = 5 * scale / 16;
-  if (head > 0) {
-    draw_triangle(ctx, SX(1), top - 4, head, 8, true);
-    draw_triangle(ctx, SX(-1) - head, bottom - 4, head, 8, false);
-  }
-  // Repeating one song: a 1 in the middle of the loop.
-  if (one && scale >= 12) {
-    graphics_context_set_text_color(ctx, color);
-    graphics_draw_text(ctx, "1", fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                       GRect(cx - 6, cy - 10, 12, 16), GTextOverflowModeFill,
-                       GTextAlignmentCenter, NULL);
+  const int head = 7 * scale / 16;
+  if (one) {
+    // Repeating one song, drawn the way Spotify does: a closed loop with a
+    // gap in the top where a 1 sits, and one arrowhead on the bottom run.
+    graphics_draw_line(ctx, GPoint(SX(-5), top), GPoint(SX(-9), top));
+    graphics_draw_line(ctx, GPoint(SX(-9), top), GPoint(SX(-11), top + 2));
+    graphics_draw_line(ctx, GPoint(SX(-11), top + 2), GPoint(SX(-11), bottom - 2));
+    graphics_draw_line(ctx, GPoint(SX(-11), bottom - 2), GPoint(SX(-9), bottom));
+    graphics_draw_line(ctx, GPoint(SX(5), top), GPoint(SX(9), top));
+    graphics_draw_line(ctx, GPoint(SX(9), top), GPoint(SX(11), top + 2));
+    graphics_draw_line(ctx, GPoint(SX(11), top + 2), GPoint(SX(11), bottom - 2));
+    graphics_draw_line(ctx, GPoint(SX(11), bottom - 2), GPoint(SX(9), bottom));
+    graphics_draw_line(ctx, GPoint(SX(9), bottom), GPoint(SX(4), bottom));
+    graphics_draw_line(ctx, GPoint(SX(-9), bottom), GPoint(SX(-3), bottom));
+    if (head > 0) {
+      draw_triangle(ctx, SX(3) - head, bottom - 5, head, 10, false);
+    }
+    if (scale >= 12) {
+      graphics_draw_line(ctx, GPoint(cx, top - 4), GPoint(cx, top + 4));
+      graphics_draw_line(ctx, GPoint(cx - 2, top - 2), GPoint(cx, top - 4));
+    }
+  } else {
+    // Two arrows chasing each other round a loop, with a gap between the
+    // tail of one and the head of the other: up the left side and along the
+    // top to a head pointing right, down the right side and back along the
+    // bottom to a head pointing left.
+    graphics_draw_line(ctx, GPoint(SX(-11), cy - 1), GPoint(SX(-11), top + 2));
+    graphics_draw_line(ctx, GPoint(SX(-11), top + 2), GPoint(SX(-9), top));
+    graphics_draw_line(ctx, GPoint(SX(-9), top), GPoint(SX(5), top));
+    graphics_draw_line(ctx, GPoint(SX(11), cy + 1), GPoint(SX(11), bottom - 2));
+    graphics_draw_line(ctx, GPoint(SX(11), bottom - 2), GPoint(SX(9), bottom));
+    graphics_draw_line(ctx, GPoint(SX(9), bottom), GPoint(SX(-5), bottom));
+    if (head > 0) {
+      draw_triangle(ctx, SX(5), top - 5, head, 10, true);
+      draw_triangle(ctx, SX(-5) - head, bottom - 5, head, 10, false);
+    }
   }
   #undef SX
 }
@@ -311,6 +313,15 @@ static void draw_mode_button(GContext *ctx) {
     draw_repeat_sign(ctx, cx, cy, scale, s_repeat ? COLOR_ACCENT : GColorWhite, s_repeat == 2);
   } else {
     draw_shuffle_sign(ctx, cx - 3, cy, scale, s_shuffle ? COLOR_ACCENT : GColorWhite);
+  }
+  // A green dot on the corner of the button when the one that is not showing
+  // is switched on, so neither is ever on out of sight.
+  if (repeat_face ? s_shuffle : s_repeat != 0) {
+    const GPoint dot = GPoint(pill.origin.x + pill.size.w - 4, pill.origin.y + 3);
+    graphics_context_set_fill_color(ctx, GColorBlack);
+    graphics_fill_circle(ctx, dot, 5);
+    graphics_context_set_fill_color(ctx, COLOR_ACCENT);
+    graphics_fill_circle(ctx, dot, 3);
   }
 }
 

@@ -18,7 +18,8 @@ if(DEMO_NOTICE)
 endif()
 
 # -DDEMO_NP=1 opens Now Playing with a made-up song (2 = paused, 3 = shuffle on,
-# 4 = shuffle and repeat on with the button turned over to repeat).
+# 4 = shuffle and repeat on with the button turned over to repeat,
+# 5 = repeat one song).
 if(DEFINED DEMO_NP)
   target_compile_definitions(app INTERFACE DEMO_NP=${DEMO_NP})
 endif()

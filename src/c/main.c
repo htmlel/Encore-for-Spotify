@@ -504,8 +504,8 @@ static void demo_now_playing(void) {
   now_playing_window_push();
   ui_set_album_art(s_demo_art);
   track_info_cb("Golden Hour Drive", "The Night Owls", 215, 83, DEMO_NP != 2,
-                DEMO_NP == 3 || DEMO_NP == 4, DEMO_NP == 4 ? 1 : 0);
-  if (DEMO_NP == 4) {
+                DEMO_NP == 3 || DEMO_NP == 4, DEMO_NP == 4 ? 1 : DEMO_NP == 5 ? 2 : 0);
+  if (DEMO_NP >= 4) {
     ui_hold(GPoint(30, 200));  // the button turned over to repeat
   }
   comm_demo_device("Galaxy S26 Ultra");
