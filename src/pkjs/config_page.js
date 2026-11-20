@@ -40,12 +40,12 @@ function build(opts) {
     '<div id="guide" style="display:none">' +
     '<p>Spotify asks everyone who uses a small app like this one to register it ' +
     'themselves. It takes about five minutes, once. You need Spotify Premium.</p>' +
-    '<p><b>1.</b> In Chrome (or your usual browser, not here), open the Spotify ' +
-    'developer dashboard and tap <b>Create app</b>.</p>' +
-    '<button class="small" data-copy="https://developer.spotify.com/dashboard">' +
-    'Copy the dashboard address</button>' +
-    '<p>If it says "Page not found", you are not logged in: tap the menu at the top ' +
-    'right, <b>Log in</b>, then open <b>Dashboard</b> from that menu.</p>' +
+    '<p><b>1.</b> In Chrome (or your usual browser, not here), open Spotify for ' +
+    'Developers.</p>' +
+    '<button class="small" data-copy="https://developer.spotify.com/">' +
+    'Copy the Spotify for Developers address</button>' +
+    '<p>Tap the menu at the top right and <b>Log in</b>. Then open the menu again, ' +
+    'choose <b>Dashboard</b>, and tap <b>Create app</b>.</p>' +
     '<p><b>2.</b> App name and description: anything you like. For <b>Redirect URI</b>, ' +
     'paste this exactly and tap Add:</p>' +
     '<button class="small" data-copy="' + escapeHtml(opts.guideUrl) + '">' +
