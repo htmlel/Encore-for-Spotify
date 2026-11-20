@@ -861,5 +861,6 @@ void ui_refresh(void) {}
 UiHit ui_hit(GPoint tap) { (void)tap; return UI_HIT_NONE; }
 void ui_wake(void) {}
 bool ui_controls_shown(void) { return true; }
+bool ui_hold(GPoint at) { (void)at; return false; }
 
 #endif  // !PBL_PLATFORM_EMERY

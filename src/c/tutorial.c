@@ -128,6 +128,8 @@ static void tutorial_gesture(GestureKind kind, void *ctx) {
       // Left-to-right = previous page.
       up_handler(NULL, NULL);
       break;
+    case GESTURE_HOLD:
+      break;
     case GESTURE_SCROLL_UP:
     case GESTURE_SCROLL_DOWN:
       // Tutorial pages are navigated discretely; ignore drag-scroll.

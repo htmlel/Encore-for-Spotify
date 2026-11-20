@@ -117,6 +117,8 @@ static void about_gesture(GestureKind kind, void *ctx) {
     case GESTURE_SWIPE_RIGHT:
       // Ignored — too easy to misfire when scrolling diagonally.
       break;
+    case GESTURE_HOLD:
+      break;
   }
 }
 #endif
@@ -327,6 +329,8 @@ static void menu_gesture(GestureKind kind, void *ctx) {
       break;
     case GESTURE_SWIPE_RIGHT:
       // Ignored.
+      break;
+    case GESTURE_HOLD:
       break;
   }
 }

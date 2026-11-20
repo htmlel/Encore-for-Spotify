@@ -33,6 +33,7 @@ typedef enum {
   UI_HIT_PLAY_PAUSE,
   UI_HIT_NEXT,
   UI_HIT_SHUFFLE,
+  UI_HIT_REPEAT,
 } UiHit;
 void ui_set_playing(bool playing);
 void ui_refresh(void);
@@ -41,3 +42,6 @@ UiHit ui_hit(GPoint tap);
 // ui_controls_shown() says whether they are (or are coming) up.
 void ui_wake(void);
 bool ui_controls_shown(void);
+// A finger held on the screen at `at`. True if the screen did something
+// with it.
+bool ui_hold(GPoint at);

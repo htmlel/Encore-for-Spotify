@@ -335,6 +335,12 @@ static void np_gesture(GestureKind kind, void *ctx) {
           ui_set_shuffle(s_shuffle);
           comm_send_command(CMD_TOGGLE_SHUFFLE, NULL);
           break;
+        case UI_HIT_REPEAT:
+          // Off, then the whole album or playlist, then the one song.
+          s_repeat_state = (s_repeat_state + 1) % 3;
+          ui_set_repeat(s_repeat_state);
+          comm_send_command(CMD_CYCLE_REPEAT, NULL);
+          break;
         case UI_HIT_PLAY_PAUSE:
         case UI_HIT_RECORD:  // the cover
           // Shown at once; the next report from Spotify confirms it.
@@ -365,6 +371,13 @@ static void np_gesture(GestureKind kind, void *ctx) {
     case GESTURE_SCROLL_UP:
     case GESTURE_SCROLL_DOWN:
       // Nothing to scroll on Now Playing — ignore.
+      break;
+    case GESTURE_HOLD:
+      // On the Card look, holding the shuffle button turns it into the
+      // repeat button and back.
+      if (ui_hold(touch_input_last_tap())) {
+        vibes_short_pulse();
+      }
       break;
   }
 }
@@ -490,7 +503,11 @@ static void demo_now_playing(void) {
   }
   now_playing_window_push();
   ui_set_album_art(s_demo_art);
-  track_info_cb("Golden Hour Drive", "The Night Owls", 215, 83, DEMO_NP != 2, DEMO_NP == 3, 0);
+  track_info_cb("Golden Hour Drive", "The Night Owls", 215, 83, DEMO_NP != 2,
+                DEMO_NP == 3 || DEMO_NP == 4, DEMO_NP == 4 ? 1 : 0);
+  if (DEMO_NP == 4) {
+    ui_hold(GPoint(30, 200));  // the button turned over to repeat
+  }
   comm_demo_device("Galaxy S26 Ultra");
 }
 #endif

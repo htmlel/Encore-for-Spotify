@@ -41,6 +41,31 @@ static bool s_active = false;
 static bool s_dragged = false;
 static bool s_subscribed = false;
 
+// Hold: a touch that stays put this long. Lifting the finger afterwards does
+// not count as a tap as well.
+#define HOLD_MS 550
+static AppTimer *s_hold_timer = NULL;
+static bool s_held = false;
+
+static void dispatch(GestureKind kind);
+
+static void hold_cancel(void) {
+  if (s_hold_timer) {
+    app_timer_cancel(s_hold_timer);
+    s_hold_timer = NULL;
+  }
+}
+
+static void hold_fire(void *data) {
+  s_hold_timer = NULL;
+  if (!s_active || s_dragged) {
+    return;
+  }
+  s_held = true;
+  s_tap = GPoint(s_start_x, s_start_y);
+  dispatch(GESTURE_HOLD);
+}
+
 static void dispatch(GestureKind kind) {
   Window *top = window_stack_get_top_window();
   if (!top) return;
@@ -56,9 +81,21 @@ static void touch_handler(const TouchEvent *event, void *context) {
       s_last_step_y = event->y;
       s_active = true;
       s_dragged = false;
+      s_held = false;
+      hold_cancel();
+      s_hold_timer = app_timer_register(HOLD_MS, hold_fire, NULL);
       break;
     case TouchEvent_PositionUpdate: {
       if (!s_active) return;
+      // A finger that wanders off is not holding.
+      {
+        const int mx = (int)event->x - (int)s_start_x;
+        const int my = (int)event->y - (int)s_start_y;
+        if (mx > TAP_MAX_DISPLACEMENT || mx < -TAP_MAX_DISPLACEMENT ||
+            my > TAP_MAX_DISPLACEMENT || my < -TAP_MAX_DISPLACEMENT) {
+          hold_cancel();
+        }
+      }
       // Drag-scroll: fire one step per ROW_STEP_PX of vertical motion.
       // Loop in case a fast drag jumped multiple rows in one update.
       int dy = (int)event->y - (int)s_last_step_y;
@@ -81,6 +118,13 @@ static void touch_handler(const TouchEvent *event, void *context) {
     case TouchEvent_Liftoff: {
       if (!s_active) return;
       s_active = false;
+      hold_cancel();
+      // The hold already did its work.
+      if (s_held) {
+        s_held = false;
+        s_dragged = false;
+        return;
+      }
       // If the touch was already classified as a drag, swallow Liftoff
       // — no tap or swipe should fire.
       if (s_dragged) {
@@ -142,6 +186,7 @@ void touch_input_init(void) {
 }
 
 void touch_input_deinit(void) {
+  hold_cancel();
   if (s_subscribed) {
     touch_service_unsubscribe();
     s_subscribed = false;

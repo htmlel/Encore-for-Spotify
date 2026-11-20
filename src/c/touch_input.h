@@ -17,6 +17,8 @@ typedef enum {
   // down" reveals earlier rows (selection moves up). Phone convention.
   GESTURE_SCROLL_UP,
   GESTURE_SCROLL_DOWN,
+  // A finger kept still on the screen for about half a second.
+  GESTURE_HOLD,
 } GestureKind;
 
 typedef void (*GestureHandler)(GestureKind kind, void *context);

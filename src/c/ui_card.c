@@ -50,6 +50,7 @@ static int32_t s_total;
 static bool s_playing;
 static bool s_shuffle;
 static int s_repeat;
+static bool s_mode_is_repeat;      // the bottom-left button: repeat face up, else shuffle
 
 // The volume just set, shown for a moment where the device name is. A notice
 // would get in the way of pressing the button again.
@@ -140,11 +141,18 @@ static void draw_top(GContext *ctx) {
   graphics_context_set_text_color(ctx, GColorWhite);
   graphics_draw_text(ctx, s_clock, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                      GRect(12, 2, 70, 22), GTextOverflowModeFill, GTextAlignmentLeft, NULL);
-  if (s_repeat) {
+  // Whichever of shuffle and repeat is on but not on the button just now is
+  // named up here, so neither is ever switched on out of sight.
+  const char *also = NULL;
+  if (s_mode_is_repeat && s_shuffle) {
+    also = "SHUFFLE";
+  } else if (!s_mode_is_repeat && s_repeat) {
+    also = s_repeat == 2 ? "REPEAT 1" : "REPEAT";
+  }
+  if (also) {
     graphics_context_set_text_color(ctx, COLOR_ACCENT);
-    graphics_draw_text(ctx, s_repeat == 2 ? "REPEAT 1" : "REPEAT",
-                       fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD), GRect(66, 4, 90, 18),
-                       GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+    graphics_draw_text(ctx, also, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                       GRect(60, 4, 90, 18), GTextOverflowModeFill, GTextAlignmentCenter, NULL);
   }
   // The heart: green when the song is liked, a white outline when not.
   const bool liked = comm_get_liked() == 1;
@@ -211,29 +219,99 @@ static void draw_buttons(GContext *ctx) {
   graphics_fill_rect(ctx, GRect(174, cy - 7, 3, 14), 0, GCornerNone);
 }
 
-static void draw_shuffle_button(GContext *ctx) {
-  const GRect pill = GRect(8, SLIDER_Y - 14, 44, 28);
-  fill_pill(ctx, pill, COLOR_PILL);
-  // The usual shuffle sign, green when shuffle is on: two arrows that run
-  // level, swap heights in the middle, and run level again.
-  const GColor color = s_shuffle ? COLOR_ACCENT : GColorWhite;
-  const int x = pill.origin.x + 8;
-  const int top = pill.origin.y + 9;
-  const int bottom = top + 10;
+// The button at the bottom left shows shuffle or repeat. Holding it flips it
+// over to the other one, like a coin: it narrows to nothing, changes face,
+// and widens again.
+#define MODE_FLIP_STEPS 8     // even: the face changes at the halfway step
+#define MODE_FLIP_MS 30
+static int s_flip_step = -1;       // -1 when not flipping
+static AppTimer *s_flip_timer;
+
+static GRect mode_button_rect(void) {
+  return GRect(8, SLIDER_Y - 14, 44, 28);
+}
+
+// Both signs are drawn around a center, with every sideways distance scaled
+// by `scale` sixteenths, which is what makes the flip.
+static void draw_shuffle_sign(GContext *ctx, int cx, int cy, int scale, GColor color) {
+  #define SX(dx) (cx + (dx) * scale / 16)
+  const int top = cy - 5;
+  const int bottom = cy + 5;
   graphics_context_set_stroke_color(ctx, color);
   graphics_context_set_stroke_width(ctx, 2);
-  // Starts at the top left, ends at the bottom right.
-  graphics_draw_line(ctx, GPoint(x, top), GPoint(x + 6, top));
-  graphics_draw_line(ctx, GPoint(x + 6, top), GPoint(x + 14, bottom));
-  graphics_draw_line(ctx, GPoint(x + 14, bottom), GPoint(x + 20, bottom));
-  // Starts at the bottom left, ends at the top right.
-  graphics_draw_line(ctx, GPoint(x, bottom), GPoint(x + 6, bottom));
-  graphics_draw_line(ctx, GPoint(x + 6, bottom), GPoint(x + 14, top));
-  graphics_draw_line(ctx, GPoint(x + 14, top), GPoint(x + 20, top));
-  // Arrowheads on the right-hand ends.
+  // Two arrows that run level, swap heights in the middle, and run level
+  // again: one from the top left to the bottom right, one the other way.
+  graphics_draw_line(ctx, GPoint(SX(-13), top), GPoint(SX(-7), top));
+  graphics_draw_line(ctx, GPoint(SX(-7), top), GPoint(SX(1), bottom));
+  graphics_draw_line(ctx, GPoint(SX(1), bottom), GPoint(SX(7), bottom));
+  graphics_draw_line(ctx, GPoint(SX(-13), bottom), GPoint(SX(-7), bottom));
+  graphics_draw_line(ctx, GPoint(SX(-7), bottom), GPoint(SX(1), top));
+  graphics_draw_line(ctx, GPoint(SX(1), top), GPoint(SX(7), top));
   graphics_context_set_fill_color(ctx, color);
-  draw_triangle(ctx, x + 20, top - 4, 6, 8, true);
-  draw_triangle(ctx, x + 20, bottom - 4, 6, 8, true);
+  const int head = 6 * scale / 16;
+  if (head > 0) {
+    draw_triangle(ctx, SX(7), top - 4, head, 8, true);
+    draw_triangle(ctx, SX(7), bottom - 4, head, 8, true);
+  }
+  #undef SX
+}
+
+static void draw_repeat_sign(GContext *ctx, int cx, int cy, int scale, GColor color, bool one) {
+  #define SX(dx) (cx + (dx) * scale / 16)
+  const int top = cy - 6;
+  const int bottom = cy + 6;
+  graphics_context_set_stroke_color(ctx, color);
+  graphics_context_set_stroke_width(ctx, 2);
+  // A loop: along the top to the right, down, back along the bottom, up,
+  // with an arrowhead on each run.
+  graphics_draw_line(ctx, GPoint(SX(-9), top), GPoint(SX(9), top));
+  graphics_draw_line(ctx, GPoint(SX(11), top + 2), GPoint(SX(11), bottom - 2));
+  graphics_draw_line(ctx, GPoint(SX(9), bottom), GPoint(SX(-9), bottom));
+  graphics_draw_line(ctx, GPoint(SX(-11), bottom - 2), GPoint(SX(-11), top + 2));
+  graphics_draw_line(ctx, GPoint(SX(9), top), GPoint(SX(11), top + 2));
+  graphics_draw_line(ctx, GPoint(SX(11), bottom - 2), GPoint(SX(9), bottom));
+  graphics_draw_line(ctx, GPoint(SX(-9), bottom), GPoint(SX(-11), bottom - 2));
+  graphics_draw_line(ctx, GPoint(SX(-11), top + 2), GPoint(SX(-9), top));
+  graphics_context_set_fill_color(ctx, color);
+  const int head = 5 * scale / 16;
+  if (head > 0) {
+    draw_triangle(ctx, SX(1), top - 4, head, 8, true);
+    draw_triangle(ctx, SX(-1) - head, bottom - 4, head, 8, false);
+  }
+  // Repeating one song: a 1 in the middle of the loop.
+  if (one && scale >= 12) {
+    graphics_context_set_text_color(ctx, color);
+    graphics_draw_text(ctx, "1", fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                       GRect(cx - 6, cy - 10, 12, 16), GTextOverflowModeFill,
+                       GTextAlignmentCenter, NULL);
+  }
+  #undef SX
+}
+
+static void draw_mode_button(GContext *ctx) {
+  const GRect pill = mode_button_rect();
+  fill_pill(ctx, pill, COLOR_PILL);
+  // During a flip: full width at the ends, nothing in the middle, and the
+  // other face from the halfway step on.
+  int scale = 16;
+  bool repeat_face = s_mode_is_repeat;
+  if (s_flip_step >= 0) {
+    const int half = MODE_FLIP_STEPS / 2;
+    const int from_middle = s_flip_step < half ? half - s_flip_step : s_flip_step - half;
+    scale = 16 * from_middle / half;
+    // s_mode_is_repeat already names the new face; the old one shows first.
+    repeat_face = s_flip_step < half ? !s_mode_is_repeat : s_mode_is_repeat;
+  }
+  if (scale <= 0) {
+    return;
+  }
+  const int cx = pill.origin.x + pill.size.w / 2;
+  const int cy = pill.origin.y + pill.size.h / 2;
+  if (repeat_face) {
+    draw_repeat_sign(ctx, cx, cy, scale, s_repeat ? COLOR_ACCENT : GColorWhite, s_repeat == 2);
+  } else {
+    draw_shuffle_sign(ctx, cx - 3, cy, scale, s_shuffle ? COLOR_ACCENT : GColorWhite);
+  }
 }
 
 static void format_time(char *out, size_t size, int32_t sec, bool minus) {
@@ -281,7 +359,7 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   draw_cover(ctx);
   draw_text(ctx);
   draw_buttons(ctx);
-  draw_shuffle_button(ctx);
+  draw_mode_button(ctx);
   draw_slider(ctx);
 }
 
@@ -289,6 +367,37 @@ static void redraw(void) {
   if (s_canvas) {
     layer_mark_dirty(s_canvas);
   }
+}
+
+// --- Flipping the mode button -----------------------------------------------
+
+static void flip_step(void *data) {
+  s_flip_timer = NULL;
+  s_flip_step++;
+  if (s_flip_step > MODE_FLIP_STEPS) {
+    s_flip_step = -1;
+  } else if (s_canvas) {
+    s_flip_timer = app_timer_register(MODE_FLIP_MS, flip_step, NULL);
+  } else {
+    s_flip_step = -1;
+  }
+  redraw();
+}
+
+bool card_hold(GPoint at) {
+  const GRect pill = mode_button_rect();
+  // A little room around the button for a fingertip.
+  if (at.x > pill.origin.x + pill.size.w + 8 || at.y < pill.origin.y - 10) {
+    return false;
+  }
+  if (s_flip_timer) {
+    return true;  // already turning over
+  }
+  s_mode_is_repeat = !s_mode_is_repeat;
+  s_flip_step = 0;
+  s_flip_timer = app_timer_register(MODE_FLIP_MS, flip_step, NULL);
+  redraw();
+  return true;
 }
 
 // --- Clock ------------------------------------------------------------------
@@ -329,6 +438,11 @@ void card_deinit(void) {
     s_volume_timer = NULL;
   }
   s_volume_text[0] = '\0';
+  if (s_flip_timer) {
+    app_timer_cancel(s_flip_timer);
+    s_flip_timer = NULL;
+  }
+  s_flip_step = -1;
   if (s_canvas) {
     layer_destroy(s_canvas);
     s_canvas = NULL;
@@ -428,7 +542,7 @@ UiHit card_hit(GPoint p) {
     return p.x < 65 ? UI_HIT_PREV : p.x < 135 ? UI_HIT_PLAY_PAUSE : UI_HIT_NEXT;
   }
   if (p.y >= SLIDER_Y - 20 && p.x < 58) {
-    return UI_HIT_SHUFFLE;
+    return s_mode_is_repeat ? UI_HIT_REPEAT : UI_HIT_SHUFFLE;
   }
   return UI_HIT_NONE;
 }

@@ -114,6 +114,8 @@ static void more_gesture(GestureKind kind, void *ctx) {
     case GESTURE_SWIPE_RIGHT:
       // Ignored.
       break;
+    case GESTURE_HOLD:
+      break;
   }
 }
 #endif
