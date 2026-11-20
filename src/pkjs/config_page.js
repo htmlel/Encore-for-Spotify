@@ -27,13 +27,34 @@ function build(opts) {
     'button{display:block;width:100%;background:#1DB954;color:#fff;padding:14px;font-size:17px;' +
     'border-radius:24px;margin-top:12px;border:none}' +
     'button.plain{background:#333}' +
+    'button.small{background:#333;font-size:15px;padding:11px;margin:6px 0 10px}' +
     '.box{border:1px solid #333;border-radius:8px;padding:14px;margin-top:14px}' +
     '.state{font-weight:bold;color:#1DB954}.warn{color:#ffb74d}' +
     'a{color:#9be7b4;font-weight:bold}' +
     '</style></head><body>' +
     '<p class="state">' + (opts.loggedIn ? 'Connected to Spotify.' : 'Not connected yet.') + '</p>' +
     '<div class="box"><h2 style="margin-top:0">Spotify Client ID</h2>' +
-    '<p>First time? <a href="' + escapeHtml(opts.guideUrl) + '">Setup guide</a></p>' +
+    '<p>First time? <a href="#" id="guideLink">Setup guide</a></p>' +
+    // The guide opens in place: leaving this page for a website shows a
+    // blank screen in the Pebble app.
+    '<div id="guide" style="display:none">' +
+    '<p>Spotify asks everyone who uses a small app like this one to register it ' +
+    'themselves. It takes about five minutes, once. You need Spotify Premium.</p>' +
+    '<p><b>1.</b> In Chrome (or your usual browser, not here), open Spotify\'s developer ' +
+    'dashboard, log in and tap <b>Create app</b>.</p>' +
+    '<button class="small" data-copy="https://developer.spotify.com/dashboard">' +
+    'Copy the dashboard address</button>' +
+    '<p><b>2.</b> App name and description: anything you like. For <b>Redirect URI</b>, ' +
+    'paste this exactly and tap Add:</p>' +
+    '<button class="small" data-copy="' + escapeHtml(opts.guideUrl) + '">' +
+    'Copy the Redirect URI</button>' +
+    '<p><b>3.</b> Under "Which API/SDKs are you planning to use?" pick <b>Web API</b>. ' +
+    'Agree to the terms and tap <b>Save</b>.</p>' +
+    '<p><b>4.</b> In your new app, open <b>User Management</b> and add your name and the ' +
+    'email address of your Spotify account.</p>' +
+    '<p><b>5.</b> On the app\'s <b>Basic Information</b> page, copy the <b>Client ID</b> ' +
+    'and paste it below.</p>' +
+    '<p id="guideNote"></p></div>' +
     '<input type="text" id="cid" autocapitalize="none" autocorrect="off" ' +
     'placeholder="Paste your Client ID here" value="' + escapeHtml(opts.clientId || '') + '"></div>' +
 
@@ -55,11 +76,22 @@ function build(opts) {
     '<button id="finish">Finish</button></div>' +
 
     '<button class="plain" id="logout">Log out of Spotify</button>' +
+    '<textarea id="clip" style="display:none" readonly></textarea>' +
 
     '<script>' +
     'var AUTH_BASE=' + JSON.stringify(opts.authBase) + ';' +
     'function $(id){return document.getElementById(id);}' +
     'function close(data){location.href="pebblejs://close#"+encodeURIComponent(JSON.stringify(data));}' +
+    'function copyText(text){var t=$("clip");t.style.display="block";t.value=text;' +
+    't.focus();t.select();var ok=false;' +
+    'try{ok=document.execCommand("copy");}catch(e){ok=false;}' +
+    't.style.display="none";return ok;}' +
+    '$("guideLink").onclick=function(){var g=$("guide");' +
+    'g.style.display=g.style.display==="none"?"block":"none";return false;};' +
+    'var cb=document.querySelectorAll("button[data-copy]");' +
+    'for(var i=0;i<cb.length;i++){cb[i].onclick=function(){' +
+    'var text=this.getAttribute("data-copy");' +
+    '$("guideNote").textContent=copyText(text)?"Copied: "+text:"Copy this: "+text;};}' +
     '$("copy").onclick=function(){' +
     'var cid=$("cid").value.trim();' +
     'if(!cid){$("copied").textContent="Enter your Client ID first.";return;}' +

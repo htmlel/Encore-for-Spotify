@@ -93,17 +93,6 @@
           ]
         },
         "reason": "Downloads album art."
-      },
-      {
-        "name": "Internet",
-        "required": true,
-        "parameters": {
-          "domains": [
-            "htmlel.github.io",
-            "developer.spotify.com"
-          ]
-        },
-        "reason": "Opens the setup guide and Spotify's developer dashboard from Settings."
       }
     ]
   }
