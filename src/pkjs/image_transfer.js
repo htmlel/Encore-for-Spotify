@@ -3,7 +3,10 @@ var jpeg = require('jpeg-js');
 function getChunkSize() {
   try {
     var platform = Pebble.getActiveWatchInfo().platform || '';
-    if (platform === 'basalt' || platform === 'emery' || platform === 'gabbro') return 2000;
+    // The Time 2 takes messages of up to about 8 KB; fewer, bigger pieces
+    // spend less time waiting on each one to be acknowledged.
+    if (platform === 'emery') return 4000;
+    if (platform === 'basalt' || platform === 'gabbro') return 2000;
   } catch (e) { }
   return 1000;
 }
@@ -273,8 +276,40 @@ function downloadPrefetch(url, trackUri) {
   xhr.send();
 }
 
+// Packs a color image for the trip to the watch. Covers have long runs of
+// one color, so a run of 3 or more identical pixels is sent as two bytes: a
+// count byte (the run's length minus 3, at most 191) and the pixel. Every
+// pixel byte has its top two bits set and no count byte does, which is how
+// the watch tells them apart. Never comes out longer than it went in.
+function packRuns(data) {
+  var out = [];
+  var i = 0;
+  var n = data.length;
+  while (i < n) {
+    var px = data[i];
+    var run = 1;
+    while (i + run < n && data[i + run] === px && run < 194) run++;
+    if (run >= 3) {
+      out.push(run - 3, px);
+    } else {
+      for (var k = 0; k < run; k++) out.push(px);
+    }
+    i += run;
+  }
+  return out;
+}
+
+function canPack() {
+  try {
+    return (Pebble.getActiveWatchInfo().platform || '') === 'emery';
+  } catch (e) { }
+  return false;
+}
+
 function sendImageToWatch(data, width, height, slot) {
   slot = slot || 0;
+  var packed = canPack();
+  if (packed) data = packRuns(data);
   if (slot === 1) prefetchInProgress = true;
   else transferInProgress = true;
 
@@ -288,6 +323,7 @@ function sendImageToWatch(data, width, height, slot) {
     'ImageChunksTotal': totalChunks
   };
   if (slot === 1) headerMsg['ImageSlot'] = 1;
+  if (packed) headerMsg['ImagePacked'] = 1;
 
   Pebble.sendAppMessage(headerMsg, function () {
     sendChunk(data, 0, totalChunks, chunkSize, slot);
@@ -400,6 +436,7 @@ function getPrefetchedUri() {
 }
 
 module.exports = {
+  packRuns: packRuns,
   sendImageFromUrl: downloadAndSend,
   sendPrefetchFromUrl: downloadPrefetch,
   dropPrefetch: dropPrefetch,

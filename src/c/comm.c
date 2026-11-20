@@ -77,7 +77,40 @@ static void handle_status_msg(DictionaryIterator *iter) {
   }
 }
 
+// A packed image: a byte with its top two bits set is one pixel; any other
+// byte is a count, and the pixel after it is repeated count + 3 times. A
+// count and its pixel may arrive in different chunks, so the count waiting
+// for its pixel is kept between chunks (-1 when there is none).
+static bool s_packed;
+static int16_t s_run_waiting = -1;
+#if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_GABBRO)
+static bool s_next_packed;
+static int16_t s_next_run_waiting = -1;
+#endif
+
+// Unpacks one chunk onto the end of an image. False if it would not fit.
+static bool unpack_chunk(uint8_t *image, uint32_t *filled, uint32_t capacity, int16_t *run_waiting,
+                         const uint8_t *data, uint16_t len) {
+  for (uint16_t i = 0; i < len; i++) {
+    const uint8_t b = data[i];
+    if ((b & 0xC0) != 0xC0) {
+      *run_waiting = b;
+      continue;
+    }
+    const uint32_t count = *run_waiting >= 0 ? (uint32_t)*run_waiting + 3 : 1;
+    *run_waiting = -1;
+    if (*filled + count > capacity) {
+      return false;
+    }
+    memset(image + *filled, b, count);
+    *filled += count;
+  }
+  return true;
+}
+
 static void handle_image_header(DictionaryIterator *iter) {
+  Tuple *packed_tuple = dict_find(iter, MESSAGE_KEY_ImagePacked);
+  const bool packed = packed_tuple && packed_tuple->value->uint8;
   Tuple *w_tuple = dict_find(iter, MESSAGE_KEY_ImageWidth);
   Tuple *h_tuple = dict_find(iter, MESSAGE_KEY_ImageHeight);
   Tuple *size_tuple = dict_find(iter, MESSAGE_KEY_ImageDataSize);
@@ -132,6 +165,8 @@ static void handle_image_header(DictionaryIterator *iter) {
     s_next_total_chunks = total_chunks;
     s_next_received_chunks = 0;
     s_next_bytes_received = 0;
+    s_next_packed = packed;
+    s_next_run_waiting = -1;
     return;
   }
   // Slot-0 header arrival proves the new track did not match the
@@ -212,6 +247,8 @@ static void handle_image_header(DictionaryIterator *iter) {
   s_total_chunks = total_chunks;
   s_received_chunks = 0;
   s_bytes_received = 0;
+  s_packed = packed;
+  s_run_waiting = -1;
 
   snprintf(s_status_buf, sizeof(s_status_buf), "Receiving: 0/%d", total_chunks);
   if (s_callbacks.on_status) s_callbacks.on_status(s_status_buf);
@@ -235,12 +272,20 @@ static void handle_image_chunk(DictionaryIterator *iter) {
       return;
     }
     uint16_t data_len = data_tuple->length;
-    if (s_next_bytes_received + data_len > s_next_image_data_size) {
-      APP_LOG(APP_LOG_LEVEL_ERROR, "Prefetch chunk would overflow buffer");
-      return;
+    if (s_next_packed) {
+      if (!unpack_chunk(s_art_next_data, &s_next_bytes_received, s_next_image_data_size,
+                        &s_next_run_waiting, data_tuple->value->data, data_len)) {
+        APP_LOG(APP_LOG_LEVEL_ERROR, "Prefetch chunk would overflow buffer");
+        return;
+      }
+    } else {
+      if (s_next_bytes_received + data_len > s_next_image_data_size) {
+        APP_LOG(APP_LOG_LEVEL_ERROR, "Prefetch chunk would overflow buffer");
+        return;
+      }
+      memcpy(s_art_next_data + s_next_bytes_received, data_tuple->value->data, data_len);
+      s_next_bytes_received += data_len;
     }
-    memcpy(s_art_next_data + s_next_bytes_received, data_tuple->value->data, data_len);
-    s_next_bytes_received += data_len;
     s_next_received_chunks++;
     if (s_next_received_chunks >= s_next_total_chunks) {
       APP_LOG(APP_LOG_LEVEL_INFO, "Prefetch ready: %lu bytes", (unsigned long)s_next_bytes_received);
@@ -267,13 +312,20 @@ static void handle_image_chunk(DictionaryIterator *iter) {
           (unsigned long)(s_bytes_received + data_len),
           (unsigned long)s_image_data_size);
 
-  if (s_bytes_received + data_len > s_image_data_size) {
-    APP_LOG(APP_LOG_LEVEL_ERROR, "Chunk would overflow buffer!");
-    return;
+  if (s_packed) {
+    if (!unpack_chunk(s_art_data, &s_bytes_received, s_image_data_size, &s_run_waiting,
+                      data_tuple->value->data, data_len)) {
+      APP_LOG(APP_LOG_LEVEL_ERROR, "Chunk would overflow buffer!");
+      return;
+    }
+  } else {
+    if (s_bytes_received + data_len > s_image_data_size) {
+      APP_LOG(APP_LOG_LEVEL_ERROR, "Chunk would overflow buffer!");
+      return;
+    }
+    memcpy(s_art_data + s_bytes_received, data_tuple->value->data, data_len);
+    s_bytes_received += data_len;
   }
-
-  memcpy(s_art_data + s_bytes_received, data_tuple->value->data, data_len);
-  s_bytes_received += data_len;
   s_received_chunks++;
 
   snprintf(s_status_buf, sizeof(s_status_buf), "Receiving: %d/%d",

@@ -58,7 +58,8 @@
       "ListDone": 146,
       "LikedState": 129,
       "DeviceName": 130,
-      "ArtSize": 131
+      "ArtSize": 131,
+      "ImagePacked": 132
     },
     "resources": {
       "media": [
