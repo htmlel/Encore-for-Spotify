@@ -51,15 +51,15 @@ static void about_draw_row(GContext *ctx, const Layer *cell, MenuIndex *idx, voi
       menu_cell_basic_draw(ctx, cell, "Author", "htmlel", NULL);
       break;
     case 2:
+      // Credit for the app this one grew out of.
+      menu_cell_basic_draw(ctx, cell, "Based on", "Playback by alex_pavlov", NULL);
+      break;
+    case 3:
       menu_cell_basic_draw(ctx, cell, "Long press UP/DOWN",
         long_press_mode_get() == LP_MODE_VOLUME ? "Volume" : "Skip 15s", NULL);
       break;
-    case 3:
-      menu_cell_basic_draw(ctx, cell, "Version", APP_VERSION, NULL);
-      break;
     case 4:
-      // Credit for the app this one grew out of.
-      menu_cell_basic_draw(ctx, cell, "Based on", "Playback by alex_pavlov", NULL);
+      menu_cell_basic_draw(ctx, cell, "Version", APP_VERSION, NULL);
       break;
   }
 #endif
@@ -69,7 +69,7 @@ static void about_select(MenuLayer *menu, MenuIndex *idx, void *d) {
 #if !defined(PBL_PLATFORM_APLITE)
   if (idx->row == 0) {
     tutorial_show(tutorial_restart_done);
-  } else if (idx->row == 2) {
+  } else if (idx->row == 3) {
     long_press_mode_toggle();
     menu_layer_reload_data(s_about_menu);
   }
