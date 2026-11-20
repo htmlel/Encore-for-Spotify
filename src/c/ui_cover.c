@@ -328,7 +328,7 @@ static void draw_heart(GContext *ctx) {
   const bool liked = comm_get_liked() == 1;
   // A white band on the darkened part of the cover; the middle is red when
   // the song is liked, and otherwise the cover shows through.
-  heart_draw(ctx, GPoint(HEART_CX, HEART_CY), 10, 2, GColorWhite, true, liked, GColorRed);
+  heart_draw(ctx, GPoint(HEART_CX, HEART_CY), 10, 2, GColorWhite, false, liked, GColorRed);
 }
 
 // The shuffle/repeat button, opposite the heart: green when on. Holding it
