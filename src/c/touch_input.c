@@ -35,6 +35,7 @@ static HandlerEntry *find_entry(Window *win) {
 
 static int16_t s_start_x = 0;
 static int16_t s_start_y = 0;
+static GPoint s_tap;  // where the last tap landed
 static int16_t s_last_step_y = 0;
 static bool s_active = false;
 static bool s_dragged = false;
@@ -92,6 +93,7 @@ static void touch_handler(const TouchEvent *event, void *context) {
       int ady = dy < 0 ? -dy : dy;
 
       if (adx <= TAP_MAX_DISPLACEMENT && ady <= TAP_MAX_DISPLACEMENT) {
+        s_tap = GPoint(s_start_x, s_start_y);
         dispatch(GESTURE_TAP);
         return;
       }
@@ -106,6 +108,23 @@ static void touch_handler(const TouchEvent *event, void *context) {
       break;
     }
   }
+}
+
+int16_t touch_input_row_height(MenuLayer *menu, MenuIndex *index, void *context) {
+  return TOUCH_ROW_H;
+}
+
+bool touch_input_tap_row(MenuLayer *menu, int16_t header_h, uint16_t num_rows, MenuIndex *out) {
+  if (!menu) return false;
+  const GRect frame = layer_get_frame(menu_layer_get_layer(menu));
+  // The content offset is negative once the list has scrolled.
+  const GPoint offset = scroll_layer_get_content_offset(menu_layer_get_scroll_layer(menu));
+  const int y = s_tap.y - frame.origin.y - offset.y - header_h;
+  if (y < 0) return false;
+  const int row = y / TOUCH_ROW_H;
+  if (row >= num_rows) return false;
+  *out = (MenuIndex){ .section = 0, .row = row };
+  return true;
 }
 
 void touch_input_init(void) {
@@ -156,5 +175,9 @@ void touch_input_set_handler(Window *win, GestureHandler handler, void *context)
   (void)win; (void)handler; (void)context;
 }
 void touch_input_clear_handler(Window *win) { (void)win; }
+bool touch_input_tap_row(MenuLayer *menu, int16_t header_h, uint16_t num_rows, MenuIndex *out) {
+  (void)menu; (void)header_h; (void)num_rows; (void)out;
+  return false;
+}
 
 #endif

@@ -89,7 +89,14 @@ static void more_gesture(GestureKind kind, void *ctx) {
   if (!s_menu) return;
   switch (kind) {
     case GESTURE_TAP: {
-      MenuIndex idx = menu_layer_get_selected_index(s_menu);
+      // The row under the finger; a tap that misses them all acts on the
+      // highlighted row, as the Select button does.
+      MenuIndex idx;
+      if (touch_input_tap_row(s_menu, 0, 4, &idx)) {
+        menu_layer_set_selected_index(s_menu, idx, MenuRowAlignNone, false);
+      } else {
+        idx = menu_layer_get_selected_index(s_menu);
+      }
       select_click(s_menu, &idx, NULL);
       break;
     }
@@ -122,6 +129,7 @@ static void window_load(Window *window) {
   s_menu = menu_layer_create(bounds);
   menu_layer_set_callbacks(s_menu, NULL, (MenuLayerCallbacks) {
     .get_num_rows = get_num_rows,
+    TOUCH_ROW_HEIGHT_CALLBACK
     .draw_row = draw_row,
     .select_click = select_click,
   });
