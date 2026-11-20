@@ -19,21 +19,21 @@
 #define SCREEN_W 200
 
 #define COVER_X 8
-#define COVER_Y 30
+#define COVER_Y 36
 #define COVER_SIZE 96       // the cover arrives as a square this size
 #define COVER_RADIUS 8
 
 #define TEXT_X 112
 #define TEXT_W 84
 
-#define BUTTON_Y 136
+#define BUTTON_Y 141
 #define BUTTON_H 34
-#define SLIDER_Y 196
+#define SLIDER_Y 200
 #define SLIDER_X0 62
 #define SLIDER_X1 190
 
 #define HEART_CX 172   // in from the screen's rounded corner
-#define HEART_CY 15
+#define HEART_CY 14
 
 #define COLOR_ACCENT GColorJaegerGreen
 #define COLOR_PILL GColorDarkGray
