@@ -56,6 +56,7 @@
 
 <!-- Opened directly: how to set things up. -->
 <section id="guide" class="hide">
+  <p id="backRow" class="hide"><a href="#" id="back">&larr; Back to Settings</a></p>
   <h1>Setting up</h1>
   <p>Spotify asks every person who uses a small app like this one to register it themselves.
      It takes about five minutes, once. You need Spotify Premium.</p>
@@ -132,6 +133,11 @@
     $('why').textContent = error === 'access_denied' ? 'The login was canceled.' : 'Spotify said: ' + error;
   } else {
     $('guide').className = '';
+    // Opened from the watch app's Settings page: offer the way back to it.
+    if (history.length > 1) {
+      $('backRow').className = '';
+      $('back').onclick = function () { history.back(); return false; };
+    }
     var here = location.origin + location.pathname;
     $('redirect').textContent = here;
     $('copyRedirect').onclick = function () {

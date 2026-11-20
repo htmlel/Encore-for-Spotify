@@ -29,10 +29,11 @@ function build(opts) {
     'button.plain{background:#333}' +
     '.box{border:1px solid #333;border-radius:8px;padding:14px;margin-top:14px}' +
     '.state{font-weight:bold;color:#1DB954}.warn{color:#ffb74d}' +
+    'a{color:#9be7b4;font-weight:bold}' +
     '</style></head><body>' +
     '<p class="state">' + (opts.loggedIn ? 'Connected to Spotify.' : 'Not connected yet.') + '</p>' +
     '<div class="box"><h2 style="margin-top:0">Spotify Client ID</h2>' +
-    '<p>First time? The setup guide is at<br><b>' + escapeHtml(opts.guideUrl) + '</b></p>' +
+    '<p>First time? <a href="' + escapeHtml(opts.guideUrl) + '">Setup guide</a></p>' +
     '<input type="text" id="cid" autocapitalize="none" autocorrect="off" ' +
     'placeholder="Paste your Client ID here" value="' + escapeHtml(opts.clientId || '') + '"></div>' +
 
