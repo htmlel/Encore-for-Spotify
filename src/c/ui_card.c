@@ -14,6 +14,7 @@
 #include "comm.h"
 #include "ui_looks.h"
 #include "heart.h"
+#include "mode_button.h"
 
 #if defined(PBL_PLATFORM_EMERY)
 
@@ -51,7 +52,6 @@ static int32_t s_total;
 static bool s_playing;
 static bool s_shuffle;
 static int s_repeat;
-static bool s_mode_is_repeat;      // the bottom-left button: repeat face up, else shuffle
 
 // The volume just set, shown for a moment where the device name is. A notice
 // would get in the way of pressing the button again.
@@ -185,123 +185,17 @@ static void draw_buttons(GContext *ctx) {
   graphics_fill_rect(ctx, GRect(174, cy - 7, 3, 14), 0, GCornerNone);
 }
 
-// The button at the bottom left shows shuffle or repeat. Holding it flips it
-// over to the other one, like a coin: it narrows to nothing, changes face,
-// and widens again.
-#define MODE_FLIP_STEPS 8     // even: the face changes at the halfway step
-#define MODE_FLIP_MS 30
-static int s_flip_step = -1;       // -1 when not flipping
-static AppTimer *s_flip_timer;
-
+// The button at the bottom left shows shuffle or repeat; holding it flips
+// it over to the other one (see mode_button.h).
 static GRect mode_button_rect(void) {
   return GRect(8, SLIDER_Y - 14, 44, 28);
-}
-
-// Both signs are drawn around a center, with every sideways distance scaled
-// by `scale` sixteenths, which is what makes the flip.
-static void draw_shuffle_sign(GContext *ctx, int cx, int cy, int scale, GColor color) {
-  #define SX(dx) (cx + (dx) * scale / 16)
-  const int top = cy - 5;
-  const int bottom = cy + 5;
-  graphics_context_set_stroke_color(ctx, color);
-  graphics_context_set_stroke_width(ctx, 2);
-  // Two arrows that run level, swap heights in the middle, and run level
-  // again: one from the top left to the bottom right, one the other way.
-  graphics_draw_line(ctx, GPoint(SX(-12), top), GPoint(SX(-7), top));
-  graphics_draw_line(ctx, GPoint(SX(-7), top), GPoint(SX(0), bottom));
-  graphics_draw_line(ctx, GPoint(SX(0), bottom), GPoint(SX(5), bottom));
-  graphics_draw_line(ctx, GPoint(SX(-12), bottom), GPoint(SX(-7), bottom));
-  graphics_draw_line(ctx, GPoint(SX(-7), bottom), GPoint(SX(0), top));
-  graphics_draw_line(ctx, GPoint(SX(0), top), GPoint(SX(5), top));
-  graphics_context_set_fill_color(ctx, color);
-  const int head = 7 * scale / 16;
-  if (head > 0) {
-    draw_triangle(ctx, SX(5), top - 5, head, 10, true);
-    draw_triangle(ctx, SX(5), bottom - 5, head, 10, true);
-  }
-  #undef SX
-}
-
-static void draw_repeat_sign(GContext *ctx, int cx, int cy, int scale, GColor color, bool one) {
-  #define SX(dx) (cx + (dx) * scale / 16)
-  const int top = cy - 5;
-  const int bottom = cy + 5;
-  graphics_context_set_stroke_color(ctx, color);
-  graphics_context_set_stroke_width(ctx, 2);
-  graphics_context_set_fill_color(ctx, color);
-  const int head = 7 * scale / 16;
-  if (one) {
-    // Repeating one song, drawn the way Spotify does: a closed loop with a
-    // gap in the top where a 1 sits, and one arrowhead on the bottom run.
-    graphics_draw_line(ctx, GPoint(SX(-5), top), GPoint(SX(-9), top));
-    graphics_draw_line(ctx, GPoint(SX(-9), top), GPoint(SX(-11), top + 2));
-    graphics_draw_line(ctx, GPoint(SX(-11), top + 2), GPoint(SX(-11), bottom - 2));
-    graphics_draw_line(ctx, GPoint(SX(-11), bottom - 2), GPoint(SX(-9), bottom));
-    graphics_draw_line(ctx, GPoint(SX(5), top), GPoint(SX(9), top));
-    graphics_draw_line(ctx, GPoint(SX(9), top), GPoint(SX(11), top + 2));
-    graphics_draw_line(ctx, GPoint(SX(11), top + 2), GPoint(SX(11), bottom - 2));
-    graphics_draw_line(ctx, GPoint(SX(11), bottom - 2), GPoint(SX(9), bottom));
-    graphics_draw_line(ctx, GPoint(SX(9), bottom), GPoint(SX(4), bottom));
-    graphics_draw_line(ctx, GPoint(SX(-9), bottom), GPoint(SX(-3), bottom));
-    if (head > 0) {
-      draw_triangle(ctx, SX(3) - head, bottom - 5, head, 10, false);
-    }
-    if (scale >= 12) {
-      graphics_draw_line(ctx, GPoint(cx, top - 4), GPoint(cx, top + 4));
-      graphics_draw_line(ctx, GPoint(cx - 2, top - 2), GPoint(cx, top - 4));
-    }
-  } else {
-    // Two arrows chasing each other round a loop, with a gap between the
-    // tail of one and the head of the other: up the left side and along the
-    // top to a head pointing right, down the right side and back along the
-    // bottom to a head pointing left.
-    graphics_draw_line(ctx, GPoint(SX(-11), cy - 1), GPoint(SX(-11), top + 2));
-    graphics_draw_line(ctx, GPoint(SX(-11), top + 2), GPoint(SX(-9), top));
-    graphics_draw_line(ctx, GPoint(SX(-9), top), GPoint(SX(5), top));
-    graphics_draw_line(ctx, GPoint(SX(11), cy + 1), GPoint(SX(11), bottom - 2));
-    graphics_draw_line(ctx, GPoint(SX(11), bottom - 2), GPoint(SX(9), bottom));
-    graphics_draw_line(ctx, GPoint(SX(9), bottom), GPoint(SX(-5), bottom));
-    if (head > 0) {
-      draw_triangle(ctx, SX(5), top - 5, head, 10, true);
-      draw_triangle(ctx, SX(-5) - head, bottom - 5, head, 10, false);
-    }
-  }
-  #undef SX
 }
 
 static void draw_mode_button(GContext *ctx) {
   const GRect pill = mode_button_rect();
   fill_pill(ctx, pill, COLOR_PILL);
-  // During a flip: full width at the ends, nothing in the middle, and the
-  // other face from the halfway step on.
-  int scale = 16;
-  bool repeat_face = s_mode_is_repeat;
-  if (s_flip_step >= 0) {
-    const int half = MODE_FLIP_STEPS / 2;
-    const int from_middle = s_flip_step < half ? half - s_flip_step : s_flip_step - half;
-    scale = 16 * from_middle / half;
-    // s_mode_is_repeat already names the new face; the old one shows first.
-    repeat_face = s_flip_step < half ? !s_mode_is_repeat : s_mode_is_repeat;
-  }
-  if (scale <= 0) {
-    return;
-  }
-  const int cx = pill.origin.x + pill.size.w / 2;
-  const int cy = pill.origin.y + pill.size.h / 2;
-  if (repeat_face) {
-    draw_repeat_sign(ctx, cx, cy, scale, s_repeat ? COLOR_ACCENT : GColorWhite, s_repeat == 2);
-  } else {
-    draw_shuffle_sign(ctx, cx, cy, scale, s_shuffle ? COLOR_ACCENT : GColorWhite);
-  }
-  // A green dot on the corner of the button when the one that is not showing
-  // is switched on, so neither is ever on out of sight.
-  if (repeat_face ? s_shuffle : s_repeat != 0) {
-    const GPoint dot = GPoint(pill.origin.x + pill.size.w - 4, pill.origin.y + 3);
-    graphics_context_set_fill_color(ctx, GColorBlack);
-    graphics_fill_circle(ctx, dot, 5);
-    graphics_context_set_fill_color(ctx, COLOR_ACCENT);
-    graphics_fill_circle(ctx, dot, 3);
-  }
+  mode_button_draw(ctx, GPoint(pill.origin.x + pill.size.w / 2, pill.origin.y + pill.size.h / 2),
+                   s_shuffle, s_repeat, COLOR_ACCENT, GPoint(18, -11));
 }
 
 static void format_time(char *out, size_t size, int32_t sec, bool minus) {
@@ -359,34 +253,13 @@ static void redraw(void) {
   }
 }
 
-// --- Flipping the mode button -----------------------------------------------
-
-static void flip_step(void *data) {
-  s_flip_timer = NULL;
-  s_flip_step++;
-  if (s_flip_step > MODE_FLIP_STEPS) {
-    s_flip_step = -1;
-  } else if (s_canvas) {
-    s_flip_timer = app_timer_register(MODE_FLIP_MS, flip_step, NULL);
-  } else {
-    s_flip_step = -1;
-  }
-  redraw();
-}
-
 bool card_hold(GPoint at) {
   const GRect pill = mode_button_rect();
   // A little room around the button for a fingertip.
   if (at.x > pill.origin.x + pill.size.w + 8 || at.y < pill.origin.y - 10) {
     return false;
   }
-  if (s_flip_timer) {
-    return true;  // already turning over
-  }
-  s_mode_is_repeat = !s_mode_is_repeat;
-  s_flip_step = 0;
-  s_flip_timer = app_timer_register(MODE_FLIP_MS, flip_step, NULL);
-  redraw();
+  mode_button_flip(redraw);
   return true;
 }
 
@@ -428,11 +301,7 @@ void card_deinit(void) {
     s_volume_timer = NULL;
   }
   s_volume_text[0] = '\0';
-  if (s_flip_timer) {
-    app_timer_cancel(s_flip_timer);
-    s_flip_timer = NULL;
-  }
-  s_flip_step = -1;
+  mode_button_stop();
   if (s_canvas) {
     layer_destroy(s_canvas);
     s_canvas = NULL;
@@ -532,7 +401,7 @@ UiHit card_hit(GPoint p) {
     return p.x < 65 ? UI_HIT_PREV : p.x < 135 ? UI_HIT_PLAY_PAUSE : UI_HIT_NEXT;
   }
   if (p.y >= SLIDER_Y - 20 && p.x < 58) {
-    return s_mode_is_repeat ? UI_HIT_REPEAT : UI_HIT_SHUFFLE;
+    return mode_button_is_repeat() ? UI_HIT_REPEAT : UI_HIT_SHUFFLE;
   }
   return UI_HIT_NONE;
 }

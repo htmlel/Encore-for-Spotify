@@ -23,6 +23,7 @@ UiHit card_hit(GPoint tap);
 void card_wake(void);
 bool card_controls_shown(void);
 bool card_hold(GPoint at);
+bool cover_hold(GPoint at);
 
 // ui_cover.c
 void cover_init(Window *window);

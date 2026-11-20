@@ -69,7 +69,7 @@ bool ui_controls_shown(void) {
 }
 
 bool ui_hold(GPoint at) {
-  return s_showing_cover ? false : card_hold(at);
+  return s_showing_cover ? cover_hold(at) : card_hold(at);
 }
 
 #endif  // PBL_PLATFORM_EMERY

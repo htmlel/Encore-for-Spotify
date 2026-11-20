@@ -373,8 +373,8 @@ static void np_gesture(GestureKind kind, void *ctx) {
       // Nothing to scroll on Now Playing — ignore.
       break;
     case GESTURE_HOLD:
-      // On the Card look, holding the shuffle button turns it into the
-      // repeat button and back.
+      // Holding the shuffle button turns it into the repeat button and
+      // back.
       if (ui_hold(touch_input_last_tap())) {
         vibes_short_pulse();
       }
@@ -513,10 +513,14 @@ static void demo_now_playing(void) {
   }
   now_playing_window_push();
   ui_set_album_art(s_demo_art);
-  track_info_cb("Golden Hour Drive", "The Night Owls", 215, 83, DEMO_NP != 2,
-                DEMO_NP == 3 || DEMO_NP == 4, DEMO_NP == 4 ? 1 : DEMO_NP == 5 ? 2 : 0);
-  if (DEMO_NP >= 4) {
-    ui_hold(GPoint(30, 200));  // the button turned over to repeat
+  // On the full-cover look the controls only stay up while paused.
+  const bool cover_look = now_playing_look_get() == NP_LOOK_COVER;
+  track_info_cb("Golden Hour Drive", "The Night Owls", 215, 83,
+                DEMO_NP != 2 && !(cover_look && DEMO_NP == 4), DEMO_NP == 3 || DEMO_NP == 4,
+                DEMO_NP == 4 ? 1 : DEMO_NP == 5 ? 2 : 0);
+  if (DEMO_NP == 4 || DEMO_NP == 5) {
+    // The button turned over to repeat.
+    ui_hold(cover_look ? GPoint(20, 165) : GPoint(30, 200));
   }
   comm_demo_device("Galaxy S26 Ultra");
 }

@@ -19,6 +19,7 @@
 #include "marquee.h"
 #include "ui_looks.h"
 #include "heart.h"
+#include "mode_button.h"
 
 #if defined(PBL_PLATFORM_EMERY)
 
@@ -39,6 +40,8 @@
 // goes with them.
 #define HEART_CX 181
 #define HEART_CY 164
+// The shuffle/repeat button mirrors the heart on the left.
+#define MODE_CX (SCREEN_W - HEART_CX)
 #define TEXT_SIDE 32        // kept clear on both sides of the name, so it stays centered
 
 static Layer *s_canvas;
@@ -328,21 +331,17 @@ static void draw_heart(GContext *ctx) {
   heart_draw(ctx, GPoint(HEART_CX, HEART_CY), 10, 2, GColorWhite, true, liked, GColorRed);
 }
 
-// Along the top: the time in the middle, with shuffle to its left and repeat
-// to its right when they are on.
+// The shuffle/repeat button, opposite the heart: green when on. Holding it
+// flips it between the two.
+static void draw_mode(GContext *ctx) {
+  mode_button_draw(ctx, GPoint(MODE_CX, HEART_CY), s_shuffle, s_repeat, GColorGreen, GPoint(11, -10));
+}
+
+// The time, in the middle along the top.
 static void draw_bar(GContext *ctx) {
   graphics_context_set_text_color(ctx, (GColor){.argb = INK_WHITE});
   graphics_draw_text(ctx, s_clock, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                      GRect(60, -5, 80, 22), GTextOverflowModeFill, GTextAlignmentCenter, NULL);
-  GFont small = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
-  if (s_shuffle) {
-    graphics_draw_text(ctx, "SHUF", small, GRect(12, -3, 50, 18), GTextOverflowModeFill,
-                       GTextAlignmentLeft, NULL);
-  }
-  if (s_repeat) {
-    graphics_draw_text(ctx, s_repeat == 2 ? "RPT 1" : "RPT", small, GRect(138, -3, 50, 18),
-                       GTextOverflowModeFill, GTextAlignmentRight, NULL);
-  }
 }
 
 static void format_time(char *out, size_t size, int32_t sec, bool minus) {
@@ -441,6 +440,7 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   if (s_controls >= 8) {
     draw_text_and_progress(ctx);
     draw_heart(ctx);
+    draw_mode(ctx);
     draw_buttons(ctx);
   }
 }
@@ -553,6 +553,7 @@ void cover_init(Window *window) {
 
 void cover_deinit(void) {
   tick_timer_service_unsubscribe();
+  mode_button_stop();
   if (s_volume_timer) {
     app_timer_cancel(s_volume_timer);
     s_volume_timer = NULL;
@@ -667,6 +668,17 @@ void cover_refresh(void) {
   redraw();
 }
 
+bool cover_hold(GPoint p) {
+  // Holding the shuffle/repeat button flips it over. With only the cover
+  // showing there is no button to hold.
+  if (s_controls < 8 || p.x >= 2 * TEXT_SIDE || p.y < TITLE_Y - 4 || p.y >= DEVICE_Y + 6) {
+    return false;
+  }
+  cover_wake();
+  mode_button_flip(redraw);
+  return true;
+}
+
 UiHit cover_hit(GPoint p) {
   if (p.y >= BUTTONS_Y) {
     return p.x < 67 ? UI_HIT_PREV : p.x < 134 ? UI_HIT_PLAY_PAUSE : UI_HIT_NEXT;
@@ -674,6 +686,10 @@ UiHit cover_hit(GPoint p) {
   // The heart, with room around it for a fingertip.
   if (p.x >= SCREEN_W - 2 * TEXT_SIDE && p.y >= TITLE_Y - 4 && p.y < DEVICE_Y + 6) {
     return UI_HIT_HEART;
+  }
+  // The shuffle/repeat button, the same on the other side.
+  if (p.x < 2 * TEXT_SIDE && p.y >= TITLE_Y - 4 && p.y < DEVICE_Y + 6) {
+    return mode_button_is_repeat() ? UI_HIT_REPEAT : UI_HIT_SHUFFLE;
   }
   // The clear part of the cover plays and pauses.
   if (p.y < TITLE_Y) {
