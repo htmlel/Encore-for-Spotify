@@ -38,7 +38,7 @@
 // The heart sits to the right of the song name and artist, and comes and
 // goes with them.
 #define HEART_CX 181
-#define HEART_CY 162
+#define HEART_CY 164
 #define TEXT_SIDE 32        // kept clear on both sides of the name, so it stays centered
 
 static Layer *s_canvas;
