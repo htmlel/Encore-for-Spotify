@@ -202,7 +202,14 @@ static void draw_cover(GContext *ctx) {
 
 // Text with a black edge, so it reads on any cover.
 static void draw_edged_text(GContext *ctx, const char *text, GFont font, GRect r,
-                            GTextAlignment align) {
+                            GTextAlignment align, bool on_light) {
+  // On a light cover plain black reads best; a white letter with a black
+  // edge there looks hollow.
+  if (on_light) {
+    graphics_context_set_text_color(ctx, GColorBlack);
+    graphics_draw_text(ctx, text, font, r, GTextOverflowModeFill, align, NULL);
+    return;
+  }
   graphics_context_set_text_color(ctx, GColorBlack);
   for (int dx = -1; dx <= 1; dx++) {
     for (int dy = -1; dy <= 1; dy++) {
@@ -257,6 +264,22 @@ static void save_top_strip(GContext *ctx) {
   graphics_release_frame_buffer(ctx, fb);
 }
 
+// Whether the cover is light behind a part of the top strip, from the copy
+// taken before anything was drawn on it.
+static bool strip_is_light(int x0, int x1, int y0, int y1) {
+  int sum = 0;
+  int n = 0;
+  for (int y = y0; y < y1 && y < TOP_STRIP_H; y += 2) {
+    for (int x = x0; x < x1 && x < SCREEN_W; x += 2) {
+      const uint8_t c = s_top_strip[y * SCREEN_W + x];
+      // Green counts most toward how bright a color looks, blue least.
+      sum += 3 * ((c >> 4) & 3) + 6 * ((c >> 2) & 3) + (c & 3);
+      n++;
+    }
+  }
+  return n > 0 && sum > n * 17;  // of 30 for white
+}
+
 static void finish_top_strip(GContext *ctx) {
   GBitmap *fb = graphics_capture_frame_buffer(ctx);
   if (!fb) {
@@ -277,15 +300,16 @@ static void finish_top_strip(GContext *ctx) {
 
 static void draw_heart(GContext *ctx) {
   const bool liked = comm_get_liked() == 1;
-  // Straight on the cover, so it has to read on white and on black alike: a
-  // white band with a black line on both sides of it. The middle is red when
-  // the song is liked; otherwise the cover shows through.
-  graphics_context_set_fill_color(ctx, GColorBlack);
-  draw_heart_shape(ctx, HEART_CX, HEART_CY, 5);
-  graphics_context_set_fill_color(ctx, GColorWhite);
+  // Straight on the cover: one solid band, black where the cover is light
+  // and white (with a thin black edge) where it is dark. The middle is red
+  // when the song is liked; otherwise the cover shows through.
+  const bool on_light = strip_is_light(HEART_CX - 16, HEART_CX + 16, HEART_CY - 12, HEART_CY + 16);
+  if (!on_light) {
+    graphics_context_set_fill_color(ctx, GColorBlack);
+    draw_heart_shape(ctx, HEART_CX, HEART_CY, 5);
+  }
+  graphics_context_set_fill_color(ctx, on_light ? GColorBlack : GColorWhite);
   draw_heart_shape(ctx, HEART_CX, HEART_CY, 4);
-  graphics_context_set_fill_color(ctx, GColorBlack);
-  draw_heart_shape(ctx, HEART_CX, HEART_CY, 2);
   // Hard edges here, so every pixel of the middle is exactly the stand-in
   // color that finish_top_strip() looks for.
   graphics_context_set_antialiased(ctx, false);
@@ -297,7 +321,8 @@ static void draw_heart(GContext *ctx) {
 // The time, and shuffle and repeat when they are on, over the top of the cover.
 static void draw_bar(GContext *ctx) {
   draw_edged_text(ctx, s_clock, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                  GRect(12, 16, 60, 22), GTextAlignmentLeft);  // level with the heart
+                  GRect(12, 16, 60, 22), GTextAlignmentLeft,  // level with the heart
+                  strip_is_light(12, 62, 20, 38));
   char modes[20] = "";
   if (s_shuffle) {
     strcat(modes, "SHUF");
@@ -308,7 +333,8 @@ static void draw_bar(GContext *ctx) {
   }
   if (modes[0]) {
     draw_edged_text(ctx, modes, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                    GRect(60, 19, 90, 18), GTextAlignmentCenter);
+                    GRect(60, 19, 90, 18), GTextAlignmentCenter,
+                    strip_is_light(70, 140, 22, 36));
   }
 }
 

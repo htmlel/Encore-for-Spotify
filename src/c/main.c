@@ -486,7 +486,12 @@ static void demo_now_playing(void) {
         const int dx = x - 100;
         const int dy = y - 80;
         uint8_t px;
-        if (dx * dx + dy * dy < 34 * 34 && y < 96) {
+        if (DEMO_NP == 6) {
+          // A pale cover, to check the time and heart on a light picture.
+          px = (x > 40 && x < 150 && y > 50 && y < 160)
+                   ? ((x < 110 && y > 90) ? GColorPictonBlueARGB8 : GColorMelonARGB8)
+                   : GColorPastelYellowARGB8;
+        } else if (dx * dx + dy * dy < 34 * 34 && y < 96) {
           px = GColorYellowARGB8;
         } else if (y < 36) {
           px = GColorImperialPurpleARGB8;
