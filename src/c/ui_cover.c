@@ -35,7 +35,7 @@
 #define BUTTON_ICON_Y 214
 
 #define HEART_CX 170   // in from the screen's rounded corner
-#define HEART_CY 20
+#define HEART_CY 27
 
 static Layer *s_canvas;
 static MarqueeLayer *s_title_layer;
@@ -134,9 +134,10 @@ static void darken_lower_half(GContext *ctx) {
   graphics_release_frame_buffer(ctx, fb);
 }
 
-// Draws the cover across the whole screen: scaled to the screen's height,
-// with the little that overhangs at the sides cropped. Works for the quick
-// preview and the full cover alike.
+// Draws the whole cover, as wide as the screen and centered top to bottom.
+// The screen is a little taller than a square cover, so a thin black strip is
+// left above and below; next to the watch's black bezel they do not show.
+// Works for the quick preview and the full cover alike.
 static void draw_cover_filling(GContext *ctx, GBitmap *bmp) {
   const GRect b = gbitmap_get_bounds(bmp);
   if (gbitmap_get_format(bmp) != GBitmapFormat8Bit || b.size.w <= 0 || b.size.h <= 0) {
@@ -148,14 +149,19 @@ static void draw_cover_filling(GContext *ctx, GBitmap *bmp) {
   if (!fb) {
     return;
   }
-  // A square cover scaled to SCREEN_H tall is SCREEN_H wide; this much of it
-  // hangs over each side.
-  const int overhang = (SCREEN_H - SCREEN_W) / 2;
+  const int top = (SCREEN_H - SCREEN_W) / 2;  // the strip above the cover
   for (int y = 0; y < SCREEN_H; y++) {
     const GBitmapDataRowInfo row = gbitmap_get_data_row_info(fb, y);
-    const uint8_t *line = src + (y * b.size.h / SCREEN_H) * stride;
+    const int cy = y - top;
+    if (cy < 0 || cy >= SCREEN_W) {
+      for (int x = row.min_x; x <= row.max_x && x < SCREEN_W; x++) {
+        row.data[x] = GColorBlackARGB8;
+      }
+      continue;
+    }
+    const uint8_t *line = src + (cy * b.size.h / SCREEN_W) * stride;
     for (int x = row.min_x; x <= row.max_x && x < SCREEN_W; x++) {
-      row.data[x] = line[(x + overhang) * b.size.w / SCREEN_H];
+      row.data[x] = line[x * b.size.w / SCREEN_W];
     }
   }
   graphics_release_frame_buffer(ctx, fb);
@@ -274,7 +280,7 @@ static void draw_heart(GContext *ctx) {
 // The time, and shuffle and repeat when they are on, over the top of the cover.
 static void draw_bar(GContext *ctx) {
   draw_edged_text(ctx, s_clock, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                  GRect(12, 9, 60, 22), GTextAlignmentLeft);  // level with the heart
+                  GRect(12, 16, 60, 22), GTextAlignmentLeft);  // level with the heart
   char modes[20] = "";
   if (s_shuffle) {
     strcat(modes, "SHUF");
@@ -285,7 +291,7 @@ static void draw_bar(GContext *ctx) {
   }
   if (modes[0]) {
     draw_edged_text(ctx, modes, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                    GRect(60, 12, 90, 18), GTextAlignmentCenter);
+                    GRect(60, 19, 90, 18), GTextAlignmentCenter);
   }
 }
 
@@ -616,7 +622,7 @@ UiHit cover_hit(GPoint p) {
     return p.x < 67 ? UI_HIT_PREV : p.x < 134 ? UI_HIT_PLAY_PAUSE : UI_HIT_NEXT;
   }
   // The heart, with room around it for a fingertip.
-  if (p.x >= SCREEN_W - 70 && p.y < 56) {
+  if (p.x >= SCREEN_W - 70 && p.y < 62) {
     return UI_HIT_HEART;
   }
   // The clear part of the cover plays and pauses.
