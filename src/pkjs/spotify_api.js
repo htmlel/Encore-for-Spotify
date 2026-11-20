@@ -73,6 +73,30 @@ function apiRequest(method, path, body, callback) {
   xhr.send(body ? JSON.stringify(body) : null);
 }
 
+// Starting music needs a device that Spotify counts as active. When nothing
+// has played for a while there is none, and Spotify answers 404. In that
+// case this picks one of the devices that are on (the phone, a speaker) and
+// starts there; if none is on at all, it says so.
+function playRequest(method, path, body, callback) {
+  apiRequest(method, path, body, function(err, data) {
+    if (!err || err.message !== 'API error 404') {
+      if (callback) callback(err, data);
+      return;
+    }
+    apiRequest('GET', '/me/player/devices', null, function(err2, found) {
+      var devices = ((found && found.devices) || []).filter(function(d) {
+        return d && d.id && !d.is_restricted;
+      });
+      if (err2 || !devices.length) {
+        if (callback) callback(new Error('Open Spotify on your phone first'), null);
+        return;
+      }
+      var sep = path.indexOf('?') === -1 ? '?' : '&';
+      apiRequest(method, path + sep + 'device_id=' + encodeURIComponent(devices[0].id), body, callback);
+    });
+  });
+}
+
 module.exports = {
   getCurrentPlayback: function(cb) {
     // additional_types=episode so /me/player returns podcast episodes in
@@ -98,7 +122,7 @@ module.exports = {
   },
 
   play: function(cb) {
-    apiRequest('PUT', '/me/player/play', cb);
+    playRequest('PUT', '/me/player/play', null, cb);
   },
 
   pause: function(cb) {
@@ -131,7 +155,7 @@ module.exports = {
 
   playContext: function(contextUri, cb, customBody) {
     var body = customBody || { context_uri: contextUri };
-    apiRequest('PUT', '/me/player/play', body, cb);
+    playRequest('PUT', '/me/player/play', body, cb);
   },
 
   getQueue: function(cb) {

@@ -464,7 +464,10 @@ function handleCommand(cmd, context) {
         if (data && data.is_playing) {
           api.pause(function() { setTimeout(fetchNowPlaying, 300); });
         } else {
-          api.play(function() { setTimeout(fetchNowPlaying, 300); });
+          api.play(function(playErr) {
+            if (playErr) sendError(playErr.message);
+            setTimeout(fetchNowPlaying, 300);
+          });
         }
       });
       break;
@@ -510,8 +513,11 @@ function handleCommand(cmd, context) {
           if (uris.length === 0) uris = [context];
         }
         api.playContext(uris ? null : context, function(err) {
-          if (err) sendError(err.message);
-          else setTimeout(fetchNowPlaying, 500);
+          if (err) { sendError(err.message); return; }
+          startPolling();
+          setTimeout(fetchNowPlaying, 500);
+          // A device that was just woken up takes a moment to report in.
+          setTimeout(fetchNowPlaying, 2500);
         }, uris ? { uris: uris } : null);
       }
       break;
@@ -592,7 +598,8 @@ function handleCommand(cmd, context) {
         api.getShowEpisodes(showId, function(err, data) {
           if (err || !data || !data.items || !data.items[0]) { sendError('No episodes'); return; }
           api.playContext(null, function(err2) {
-            if (!err2) { startPolling(); setTimeout(fetchNowPlaying, 500); }
+            if (err2) { sendError(err2.message); return; }
+            startPolling(); setTimeout(fetchNowPlaying, 500);
           }, { uris: [data.items[0].uri] });
         });
       }
