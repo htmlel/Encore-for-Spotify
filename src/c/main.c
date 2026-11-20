@@ -413,22 +413,22 @@ static GBitmap *s_demo_art;
 static void demo_now_playing(void) {
   window_stack_pop_all(false);
   // A cover drawn here: a sunset over the sea.
-  s_demo_art = gbitmap_create_blank(GSize(124, 124), GBitmapFormat8Bit);
+  s_demo_art = gbitmap_create_blank(GSize(200, 200), GBitmapFormat8Bit);
   if (s_demo_art) {
     uint8_t *data = gbitmap_get_data(s_demo_art);
     const int stride = gbitmap_get_bytes_per_row(s_demo_art);
-    for (int y = 0; y < 124; y++) {
-      for (int x = 0; x < 124; x++) {
-        const int dx = x - 62;
-        const int dy = y - 62;
+    for (int y = 0; y < 200; y++) {
+      for (int x = 0; x < 200; x++) {
+        const int dx = x - 100;
+        const int dy = y - 80;
         uint8_t px;
-        if (dx * dx + dy * dy < 24 * 24 && y < 74) {
+        if (dx * dx + dy * dy < 34 * 34 && y < 96) {
           px = GColorYellowARGB8;
-        } else if (y < 30) {
+        } else if (y < 36) {
           px = GColorImperialPurpleARGB8;
-        } else if (y < 52) {
+        } else if (y < 66) {
           px = GColorFashionMagentaARGB8;
-        } else if (y < 74) {
+        } else if (y < 96) {
           px = GColorOrangeARGB8;
         } else {
           px = ((x + y * 3) % 9 < 2) ? GColorVividCeruleanARGB8 : GColorCobaltBlueARGB8;

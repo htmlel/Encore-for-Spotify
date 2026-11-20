@@ -149,8 +149,8 @@ function processJpeg(jpegData, slot) {
     var W = 144, H = 106, isRound = false;
     try {
       var platform = Pebble.getActiveWatchInfo().platform || '';
-      // The Time 2 shows the whole cover as a square.
-      if (platform === 'emery') { W = 124; H = 124; }
+      // The Time 2 shows the whole cover, a square as wide as the screen.
+      if (platform === 'emery') { W = 200; H = 200; }
       else if (platform === 'gabbro') { W = 260; H = 260; isRound = true; }
       else if (platform === 'chalk') { W = 180; H = 180; isRound = true; }
       else if (platform === 'aplite') { W = 96; H = 96; }

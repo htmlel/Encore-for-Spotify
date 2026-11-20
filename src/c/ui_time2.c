@@ -1,9 +1,9 @@
 // Now Playing for the Pebble Time 2.
 //
-// The album cover up top, on a background tinted with the cover's own color.
-// Under it: title, artist, the device the music is on, a progress bar with
-// time gone and time left, and touch buttons. A heart beside the cover shows
-// whether the song is in Liked Songs.
+// The album cover fills the screen under a slim top bar. Its lower half is
+// darkened so the title, artist, playing device, progress bar and touch
+// buttons can sit on top of it. The bar has the time on the left and, on the
+// right, a heart that shows whether the song is in Liked Songs.
 //
 // This file replaces ui.c on the Time 2 (ui.c is the original screen, still
 // used for the other watches if the app is ever built for them).
@@ -15,16 +15,22 @@
 
 #if defined(PBL_PLATFORM_EMERY)
 
-#define COVER_SIZE 124      // the cover arrives as a square this size
-#define COVER_X 38
-#define COVER_Y 3
+#define SCREEN_W 200
+#define SCREEN_H 228
+#define COVER_SIZE 200      // the cover arrives as a square this size
+#define BAR_H 28            // the top bar; the cover takes the rest
 
-#define TITLE_Y 126
-#define ARTIST_Y 153
-#define DEVICE_Y 172
-#define PROGRESS_Y 198
-#define BUTTONS_Y 190       // touch buttons take the strip from here down
-#define BUTTON_ICON_Y 216
+#define FADE_TOP 96         // the cover starts to darken here...
+#define FADE_BOTTOM 120     // ...and is fully darkened from here down
+#define TITLE_Y 118
+#define ARTIST_Y 145
+#define DEVICE_Y 164
+#define PROGRESS_Y 192
+#define BUTTONS_Y 184       // touch buttons take the strip from here down
+#define BUTTON_ICON_Y 214
+
+#define HEART_CX 180
+#define HEART_CY 12
 
 static Layer *s_canvas;
 static MarqueeLayer *s_title_layer;
@@ -48,8 +54,8 @@ static AppTimer *s_volume_timer;
 
 // --- Colors -----------------------------------------------------------------
 
-// A dark tint of the cover for the background, so every album gets its own
-// look and the white text stays readable.
+// A dark tint of the cover, used where the cover does not reach and while
+// there is no cover.
 static GColor background_for(GBitmap *bmp) {
   if (!bmp || gbitmap_get_format(bmp) != GBitmapFormat8Bit) {
     return GColorOxfordBlue;
@@ -58,8 +64,8 @@ static GColor background_for(GBitmap *bmp) {
   const uint8_t *data = gbitmap_get_data(bmp);
   const int stride = gbitmap_get_bytes_per_row(bmp);
   int r = 0, g = 0, bl = 0, n = 0;
-  for (int y = 0; y < b.size.h; y += 3) {
-    for (int x = 0; x < b.size.w; x += 3) {
+  for (int y = 0; y < b.size.h; y += 4) {
+    for (int x = 0; x < b.size.w; x += 4) {
       const uint8_t px = data[y * stride + x];
       r += (px >> 4) & 3;
       g += (px >> 2) & 3;
@@ -78,36 +84,55 @@ static GColor background_for(GBitmap *bmp) {
   if (cg > 2) cg = 2;
   if (cb > 2) cb = 2;
   if (cr + cg + cb == 0) {
-    return GColorDarkGray;   // a black cover still gets a backdrop to sit on
+    return GColorDarkGray;   // a black cover still gets a bar that shows
   }
   return (GColor){.argb = (uint8_t)(0xC0 | (cr << 4) | (cg << 2) | cb)};
 }
 
 // --- Drawing ----------------------------------------------------------------
 
-static void draw_cover(GContext *ctx) {
-  const GRect frame = GRect(COVER_X, COVER_Y, COVER_SIZE, COVER_SIZE);
-  // A black edge lifts the cover off the background.
-  graphics_context_set_fill_color(ctx, GColorBlack);
-  graphics_fill_rect(ctx, grect_inset(frame, GEdgeInsets(-2)), 0, GCornerNone);
-  if (s_art) {
-    const GRect b = gbitmap_get_bounds(s_art);
-    // Centered, in case a cover of another size is still on its way out.
-    const GRect dest = GRect(frame.origin.x + (frame.size.w - b.size.w) / 2,
-                             frame.origin.y + (frame.size.h - b.size.h) / 2, b.size.w, b.size.h);
-    graphics_context_set_compositing_mode(ctx, GCompOpAssign);
-    graphics_draw_bitmap_in_rect(ctx, s_art, grect_crop(dest, 0));
+static const uint8_t BAYER4[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
+
+// Halves the brightness of what is on screen from FADE_BOTTOM down, with a
+// dithered run-in from FADE_TOP, so text on top of the cover stays readable.
+static void darken_lower_half(GContext *ctx) {
+  GBitmap *fb = graphics_capture_frame_buffer(ctx);
+  if (!fb) {
     return;
   }
-  // No cover yet: a plain sleeve with a note on it.
-  graphics_context_set_fill_color(ctx, GColorDarkGray);
-  graphics_fill_rect(ctx, frame, 0, GCornerNone);
-  const int cx = frame.origin.x + frame.size.w / 2;
-  const int cy = frame.origin.y + frame.size.h / 2;
+  for (int y = FADE_TOP; y < SCREEN_H; y++) {
+    const GBitmapDataRowInfo row = gbitmap_get_data_row_info(fb, y);
+    // How many of every 16 pixels to darken on this row.
+    const int level = y >= FADE_BOTTOM ? 16 : (y - FADE_TOP) * 16 / (FADE_BOTTOM - FADE_TOP);
+    for (int x = row.min_x; x <= row.max_x; x++) {
+      if (BAYER4[y & 3][x & 3] < level) {
+        const uint8_t px = row.data[x];
+        row.data[x] = 0xC0 | (((px >> 4) & 3) >> 1) << 4 | (((px >> 2) & 3) >> 1) << 2 |
+                      ((px & 3) >> 1);
+      }
+    }
+  }
+  graphics_release_frame_buffer(ctx, fb);
+}
+
+static void draw_cover(GContext *ctx) {
+  if (s_art) {
+    const GRect b = gbitmap_get_bounds(s_art);
+    // Under the bar, centered in case a cover of another size is still on its
+    // way out.
+    graphics_context_set_compositing_mode(ctx, GCompOpAssign);
+    graphics_draw_bitmap_in_rect(ctx, s_art,
+                                 GRect((SCREEN_W - b.size.w) / 2, BAR_H, b.size.w, b.size.h));
+    darken_lower_half(ctx);
+    return;
+  }
+  // No cover yet: a note where it will be.
+  const int cx = SCREEN_W / 2;
+  const int cy = 72;
   graphics_context_set_fill_color(ctx, GColorLightGray);
-  graphics_fill_circle(ctx, GPoint(cx - 8, cy + 16), 10);
-  graphics_fill_rect(ctx, GRect(cx - 2, cy - 26, 5, 44), 0, GCornerNone);
-  graphics_fill_rect(ctx, GRect(cx - 2, cy - 26, 22, 8), 0, GCornerNone);
+  graphics_fill_circle(ctx, GPoint(cx - 8, cy + 20), 12);
+  graphics_fill_rect(ctx, GRect(cx - 1, cy - 30, 6, 52), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(cx - 1, cy - 30, 26, 10), 0, GCornerNone);
 }
 
 // A heart from two circles and a triangle, centered on (cx, cy).
@@ -130,32 +155,33 @@ static void draw_heart_shape(GContext *ctx, int cx, int cy, int grow) {
 }
 
 static void draw_heart(GContext *ctx) {
-  const int cx = 18;
-  const int cy = 108;
   const bool liked = comm_get_liked() == 1;
   // An outline: the shape a size up in white, then the middle filled in red
-  // when liked or with the background when not.
+  // when liked or with the bar's color when not.
   graphics_context_set_fill_color(ctx, GColorWhite);
-  draw_heart_shape(ctx, cx, cy, 2);
+  draw_heart_shape(ctx, HEART_CX, HEART_CY, 2);
   graphics_context_set_fill_color(ctx, liked ? GColorRed : s_bg);
-  draw_heart_shape(ctx, cx, cy, 0);
+  draw_heart_shape(ctx, HEART_CX, HEART_CY, 0);
 }
 
-static void draw_side_labels(GContext *ctx) {
-  GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
+static void draw_bar(GContext *ctx) {
+  graphics_context_set_fill_color(ctx, s_bg);
+  graphics_fill_rect(ctx, GRect(0, 0, SCREEN_W, BAR_H), 0, GCornerNone);
   graphics_context_set_text_color(ctx, GColorWhite);
-  // The time, in the strip left of the cover.
-  graphics_draw_text(ctx, s_clock, font, GRect(0, 0, COVER_X - 2, 18), GTextOverflowModeFill,
-                     GTextAlignmentCenter, NULL);
-  // Shuffle and repeat, in the strip on the right, only when they are on.
-  const GRect right = GRect(COVER_X + COVER_SIZE + 2, 0, 200 - COVER_X - COVER_SIZE - 2, 18);
+  graphics_draw_text(ctx, s_clock, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                     GRect(6, 0, 60, 22), GTextOverflowModeFill, GTextAlignmentLeft, NULL);
+  // Shuffle and repeat, in the middle of the bar, only when they are on.
+  char modes[20] = "";
   if (s_shuffle) {
-    graphics_draw_text(ctx, "SHUF", font, right, GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+    strcat(modes, "SHUF");
   }
   if (s_repeat) {
-    graphics_draw_text(ctx, s_repeat == 2 ? "RPT1" : "RPT", font,
-                       GRect(right.origin.x, 18, right.size.w, 18), GTextOverflowModeFill,
-                       GTextAlignmentCenter, NULL);
+    strcat(modes, modes[0] ? "  " : "");
+    strcat(modes, s_repeat == 2 ? "RPT 1" : "RPT");
+  }
+  if (modes[0]) {
+    graphics_draw_text(ctx, modes, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                       GRect(60, 4, 96, 18), GTextOverflowModeFill, GTextAlignmentCenter, NULL);
   }
 }
 
@@ -200,7 +226,7 @@ static void draw_text_and_progress(GContext *ctx) {
     graphics_draw_text(ctx, left, font, GRect(158, PROGRESS_Y - 10, 40, 16), GTextOverflowModeFill,
                        GTextAlignmentCenter, NULL);
     const GRect bar = GRect(44, PROGRESS_Y, 112, 4);
-    graphics_context_set_fill_color(ctx, GColorBlack);
+    graphics_context_set_fill_color(ctx, GColorDarkGray);
     graphics_fill_rect(ctx, bar, 2, GCornersAll);
     const int w = (int)((int64_t)bar.size.w * s_elapsed / s_total);
     graphics_context_set_fill_color(ctx, GColorWhite);
@@ -248,8 +274,8 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   graphics_context_set_fill_color(ctx, s_bg);
   graphics_fill_rect(ctx, layer_get_bounds(layer), 0, GCornerNone);
   draw_cover(ctx);
+  draw_bar(ctx);
   draw_heart(ctx);
-  draw_side_labels(ctx);
   draw_text_and_progress(ctx);
   draw_buttons(ctx);
 }
@@ -264,7 +290,7 @@ static void redraw(void) {
 
 static void set_clock(struct tm *t) {
   strftime(s_clock, sizeof(s_clock), clock_is_24h_style() ? "%H:%M" : "%l:%M", t);
-  // "%l" pads single-digit hours with a space; drop it so the time centers.
+  // "%l" pads single-digit hours with a space; drop it.
   if (s_clock[0] == ' ') {
     memmove(s_clock, s_clock + 1, strlen(s_clock));
   }
@@ -407,10 +433,10 @@ UiHit ui_hit(GPoint p) {
     return p.x < 67 ? UI_HIT_PREV : p.x < 134 ? UI_HIT_PLAY_PAUSE : UI_HIT_NEXT;
   }
   // The heart, with room around it for a fingertip.
-  if (p.x < COVER_X + 6 && p.y >= 82 && p.y < 132) {
+  if (p.x >= SCREEN_W - 64 && p.y < 52) {
     return UI_HIT_HEART;
   }
-  // The cover itself plays and pauses.
+  // The clear part of the cover plays and pauses.
   if (p.y < TITLE_Y) {
     return UI_HIT_RECORD;
   }
