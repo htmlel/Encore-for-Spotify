@@ -126,7 +126,7 @@ static void draw_top(GContext *ctx) {
                      GRect(12, 2, 70, 22), GTextOverflowModeFill, GTextAlignmentLeft, NULL);
   // The heart: green when the song is liked, a white outline when not.
   const bool liked = comm_get_liked() == 1;
-  heart_draw(ctx, GPoint(HEART_CX, HEART_CY), 11, 2, liked ? COLOR_ACCENT : GColorWhite, false,
+  heart_draw(ctx, GPoint(HEART_CX, HEART_CY), 13, 2, liked ? COLOR_ACCENT : GColorWhite, false,
              liked, COLOR_ACCENT);
 }
 
