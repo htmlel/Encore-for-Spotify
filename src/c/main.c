@@ -519,7 +519,8 @@ static void demo_now_playing(void) {
   const bool cover_look = now_playing_look_get() == NP_LOOK_COVER;
   // A name short enough to sit still on the card, where long ones scroll.
   track_info_cb(cover_look ? "Golden Hour Drive" : "Low Tide", "The Night Owls", 215, 83,
-                DEMO_NP != 2 && !(cover_look && DEMO_NP == 4), DEMO_NP == 3 || DEMO_NP == 4,
+                DEMO_NP != 2 && !(cover_look && (DEMO_NP == 4 || DEMO_NP == 7)),
+                DEMO_NP == 3 || DEMO_NP == 4,
                 DEMO_NP == 4 ? 1 : DEMO_NP == 5 ? 2 : 0);
   if (DEMO_NP == 4 || DEMO_NP == 5) {
     // The button turned over to repeat.

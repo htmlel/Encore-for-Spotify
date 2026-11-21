@@ -466,6 +466,9 @@ const char *comm_get_device_name(void) { return s_device_name; }
 // For simulator pictures: a device name without a phone to supply one.
 void comm_demo_device(const char *name) {
   strncpy(s_device_name, name, sizeof(s_device_name) - 1);
+#if DEMO_NP == 7
+  s_liked = 1;  // a liked song
+#endif
 }
 #endif
 

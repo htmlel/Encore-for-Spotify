@@ -271,6 +271,11 @@ static void set_clock(struct tm *t) {
   if (s_clock[0] == ' ') {
     memmove(s_clock, s_clock + 1, strlen(s_clock));
   }
+#if defined(DEMO_NP)
+  // The same time in every simulator picture, so a GIF made of them does
+  // not jump about.
+  strcpy(s_clock, "9:41");
+#endif
 }
 
 static void clock_tick(struct tm *t, TimeUnits changed) {
