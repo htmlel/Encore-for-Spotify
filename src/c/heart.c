@@ -4,10 +4,12 @@
 // of a small grid is marked as edge, line or middle: the line is every pixel
 // of the heart within `thickness` of its outside, which is what keeps the
 // line the same thickness everywhere, lobes, notch and point alike.
-#define GRID 44
+#define GRID 32   // room for a heart up to 28 pixels wide and its edge
 #define HALF (GRID / 2)
 
 enum { OUTSIDE = 0, EDGE, LINE, MIDDLE };
+#define INSIDE 0x80   // set while the grid is being worked out: this pixel is in the heart
+#define KIND 0x0F
 
 static uint8_t s_grid[GRID * GRID];
 static int s_grid_scale = -1;
@@ -31,24 +33,25 @@ static bool in_heart(int gx, int gy, int scale) {
 }
 
 static void build(int scale, int thickness) {
-  static uint8_t inside[GRID * GRID];
+  uint8_t *inside = s_grid;  // the same grid; the INSIDE bit first, the kind after
   for (int gy = 0; gy < GRID; gy++) {
     for (int gx = 0; gx < GRID; gx++) {
-      inside[gy * GRID + gx] = in_heart(gx, gy, scale);
+      inside[gy * GRID + gx] = in_heart(gx, gy, scale) ? INSIDE : 0;
     }
   }
   // The curve ends in a hair-thin point; trim the single-pixel tail so the
   // heart ends on a blunt tip instead of a spike.
   for (int gy = 0; gy < GRID; gy++) {
     for (int gx = 1; gx < GRID - 1; gx++) {
-      if (inside[gy * GRID + gx] && !inside[gy * GRID + gx - 1] && !inside[gy * GRID + gx + 1]) {
+      if ((inside[gy * GRID + gx] & INSIDE) && !(inside[gy * GRID + gx - 1] & INSIDE) &&
+          !(inside[gy * GRID + gx + 1] & INSIDE)) {
         inside[gy * GRID + gx] = 0;
       }
     }
   }
   for (int gy = 0; gy < GRID; gy++) {
     for (int gx = 0; gx < GRID; gx++) {
-      const bool in = inside[gy * GRID + gx];
+      const bool in = inside[gy * GRID + gx] & INSIDE;
       // How far to look: the line's thickness from inside, one pixel from
       // outside (for the edge).
       const int reach = in ? thickness : 1;
@@ -60,14 +63,17 @@ static void build(int scale, int thickness) {
           }
           const int nx = gx + dx;
           const int ny = gy + dy;
-          const bool n_in = nx >= 0 && nx < GRID && ny >= 0 && ny < GRID && inside[ny * GRID + nx];
+          const bool n_in =
+              nx >= 0 && nx < GRID && ny >= 0 && ny < GRID && (inside[ny * GRID + nx] & INSIDE);
           if (n_in != in) {
             other_near = true;
             break;
           }
         }
       }
-      s_grid[gy * GRID + gx] = in ? (other_near ? LINE : MIDDLE) : (other_near ? EDGE : OUTSIDE);
+      // The INSIDE bit stays, for the neighbors still to be worked out.
+      s_grid[gy * GRID + gx] =
+          (uint8_t)((in ? INSIDE : 0) | (in ? (other_near ? LINE : MIDDLE) : (other_near ? EDGE : OUTSIDE)));
     }
   }
   s_grid_scale = scale;
@@ -95,7 +101,7 @@ void heart_draw(GContext *ctx, GPoint center, int scale, int thickness, GColor l
       if (x < row.min_x || x > row.max_x) {
         continue;
       }
-      switch (s_grid[gy * GRID + gx]) {
+      switch (s_grid[gy * GRID + gx] & KIND) {
         case LINE:
           row.data[x] = line.argb;
           break;

@@ -31,7 +31,7 @@ static HandlerEntry *find_entry(Window *win) {
 // Drag-scroll threshold: every ROW_STEP_PX of vertical motion advances
 // the selection by one row. Larger = slower scroll (more finger travel
 // per row). Tuned by feel on real hardware.
-#define ROW_STEP_PX            45
+#define ROW_STEP_PX            30
 
 static int16_t s_start_x = 0;
 static int16_t s_start_y = 0;

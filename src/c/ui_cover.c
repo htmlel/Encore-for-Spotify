@@ -225,105 +225,6 @@ static void draw_cover(GContext *ctx) {
   graphics_fill_rect(ctx, GRect(cx - 1, cy - 30, 26, 10), 0, GCornerNone);
 }
 
-// The time is always white, in the strip along the top, with a
-// thin dark line around them so they read on a white cover too.
-//
-// They are first drawn in stand-in colors no cover pixel has (any that did
-// are nudged to a neighboring color first), so that afterwards every pixel
-// of them can be found, the dark line laid around them, and the stand-ins
-// turned into the real white and red.
-#define TOP_STRIP_H 24
-#define INK_WHITE GColorMagentaARGB8
-#define INK_RED GColorShockingPinkARGB8
-#define INK_HOLE GColorRichBrilliantLavenderARGB8   // the middle of an unliked heart
-static uint8_t s_ink_distance[TOP_STRIP_H * SCREEN_W];
-static uint8_t s_top_strip[TOP_STRIP_H * SCREEN_W];  // the cover before anything is drawn on it
-
-static void prepare_top_strip(GContext *ctx) {
-  GBitmap *fb = graphics_capture_frame_buffer(ctx);
-  if (!fb) {
-    return;
-  }
-  for (int y = 0; y < TOP_STRIP_H; y++) {
-    const GBitmapDataRowInfo row = gbitmap_get_data_row_info(fb, y);
-    for (int x = row.min_x; x <= row.max_x && x < SCREEN_W; x++) {
-      if (row.data[x] == INK_WHITE || row.data[x] == INK_RED || row.data[x] == INK_HOLE) {
-        row.data[x] = GColorPurpleARGB8;
-      }
-      s_top_strip[y * SCREEN_W + x] = row.data[x];
-    }
-  }
-  graphics_release_frame_buffer(ctx, fb);
-}
-
-// Much darker: each color channel has four levels, and only the top one
-// keeps anything.
-static uint8_t darkest(uint8_t c) {
-  const uint8_t r = (c >> 4) & 3, g = (c >> 2) & 3, b = c & 3;
-  return (uint8_t)(0xC0 | ((r / 3) << 4) | ((g / 3) << 2) | (b / 3));
-}
-
-static void finish_top_strip(GContext *ctx) {
-  GBitmap *fb = graphics_capture_frame_buffer(ctx);
-  if (!fb) {
-    return;
-  }
-  // How far each pixel is from the nearest pixel of the time or heart, in
-  // half pixels (2 for a step sideways, 3 for a diagonal one): one sweep
-  // down the strip and one back up.
-  for (int y = 0; y < TOP_STRIP_H; y++) {
-    const GBitmapDataRowInfo row = gbitmap_get_data_row_info(fb, y);
-    for (int x = 0; x < SCREEN_W; x++) {
-      const bool ink = x >= row.min_x && x <= row.max_x &&
-                       (row.data[x] == INK_WHITE || row.data[x] == INK_RED);
-      s_ink_distance[y * SCREEN_W + x] = ink ? 0 : 100;
-    }
-  }
-  #define D(xx, yy) s_ink_distance[(yy) * SCREEN_W + (xx)]
-  #define LOWER(xx, yy, add) \
-    do { if (D(xx, yy) + (add) < d) d = D(xx, yy) + (add); } while (0)
-  for (int y = 0; y < TOP_STRIP_H; y++) {
-    for (int x = 0; x < SCREEN_W; x++) {
-      int d = D(x, y);
-      if (x > 0) LOWER(x - 1, y, 2);
-      if (y > 0) LOWER(x, y - 1, 2);
-      if (x > 0 && y > 0) LOWER(x - 1, y - 1, 3);
-      if (x < SCREEN_W - 1 && y > 0) LOWER(x + 1, y - 1, 3);
-      D(x, y) = (uint8_t)d;
-    }
-  }
-  for (int y = TOP_STRIP_H - 1; y >= 0; y--) {
-    for (int x = SCREEN_W - 1; x >= 0; x--) {
-      int d = D(x, y);
-      if (x < SCREEN_W - 1) LOWER(x + 1, y, 2);
-      if (y < TOP_STRIP_H - 1) LOWER(x, y + 1, 2);
-      if (x < SCREEN_W - 1 && y < TOP_STRIP_H - 1) LOWER(x + 1, y + 1, 3);
-      if (x > 0 && y < TOP_STRIP_H - 1) LOWER(x - 1, y + 1, 3);
-      D(x, y) = (uint8_t)d;
-    }
-  }
-  // A thin dark line right against the letters and the heart.
-  for (int y = 0; y < TOP_STRIP_H; y++) {
-    const GBitmapDataRowInfo row = gbitmap_get_data_row_info(fb, y);
-    for (int x = row.min_x; x <= row.max_x && x < SCREEN_W; x++) {
-      const int d = D(x, y);
-      if (d == 0) {
-        row.data[x] = row.data[x] == INK_RED ? GColorRedARGB8 : GColorWhiteARGB8;
-      } else if (row.data[x] == INK_HOLE) {
-        // Inside the heart the cover shows, with only the thin dark line
-        // against the band.
-        const uint8_t cover = s_top_strip[y * SCREEN_W + x];
-        row.data[x] = d <= 2 ? darkest(cover) : cover;
-      } else if (d <= 3) {
-        row.data[x] = darkest(row.data[x]);
-      }
-    }
-  }
-  #undef LOWER
-  #undef D
-  graphics_release_frame_buffer(ctx, fb);
-}
-
 static void draw_heart(GContext *ctx) {
   const bool liked = comm_get_liked() == 1;
   // A white band on the darkened part of the cover; the middle is red when
@@ -339,11 +240,23 @@ static void draw_mode(GContext *ctx) {
                    GPoint(10, -9), true);
 }
 
-// The time, in the middle along the top.
+// The time, in the middle along the top: always white, with a thin black
+// line around it so it reads on a white cover too.
 static void draw_bar(GContext *ctx) {
-  graphics_context_set_text_color(ctx, (GColor){.argb = INK_WHITE});
-  graphics_draw_text(ctx, s_clock, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                     GRect(60, -3, 80, 22), GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+  GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
+  const GRect box = GRect(60, -3, 80, 22);
+  graphics_context_set_text_color(ctx, GColorBlack);
+  for (int dx = -1; dx <= 1; dx++) {
+    for (int dy = -1; dy <= 1; dy++) {
+      if (dx || dy) {
+        graphics_draw_text(ctx, s_clock, font,
+                           GRect(box.origin.x + dx, box.origin.y + dy, box.size.w, box.size.h),
+                           GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+      }
+    }
+  }
+  graphics_context_set_text_color(ctx, GColorWhite);
+  graphics_draw_text(ctx, s_clock, font, box, GTextOverflowModeFill, GTextAlignmentCenter, NULL);
 }
 
 static void format_time(char *out, size_t size, int32_t sec, bool minus) {
@@ -435,9 +348,7 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   graphics_context_set_fill_color(ctx, s_bg);
   graphics_fill_rect(ctx, layer_get_bounds(layer), 0, GCornerNone);
   draw_cover(ctx);
-  prepare_top_strip(ctx);
   draw_bar(ctx);
-  finish_top_strip(ctx);
   // The text, heart and buttons come and go halfway through the fade.
   if (s_controls >= 8) {
     draw_text_and_progress(ctx);

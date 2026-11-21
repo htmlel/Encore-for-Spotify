@@ -234,6 +234,20 @@ static void handle_image_header(DictionaryIterator *iter) {
 
   GBitmapFormat fmt = PBL_IF_COLOR_ELSE(GBitmapFormat8Bit, GBitmapFormat1Bit);
   s_art_pending = gbitmap_create_blank(GSize(width, height), fmt);
+  if (!s_art_pending && (s_art_bitmap || s_art_bitmap_prev)) {
+    // No room beside the cover on show: let that one go and try again.
+    APP_LOG(APP_LOG_LEVEL_WARNING, "No room for the new cover; dropping the old one");
+    if (s_callbacks.on_image_ready) s_callbacks.on_image_ready(NULL);
+    if (s_art_bitmap) {
+      gbitmap_destroy(s_art_bitmap);
+      s_art_bitmap = NULL;
+    }
+    if (s_art_bitmap_prev) {
+      gbitmap_destroy(s_art_bitmap_prev);
+      s_art_bitmap_prev = NULL;
+    }
+    s_art_pending = gbitmap_create_blank(GSize(width, height), fmt);
+  }
   if (!s_art_pending) {
     APP_LOG(APP_LOG_LEVEL_ERROR, "Failed to allocate bitmap %dx%d", width, height);
     if (s_callbacks.on_status) s_callbacks.on_status("Error: no memory");
@@ -573,7 +587,8 @@ void comm_init(CommCallbacks callbacks) {
   uint32_t outbox = 256;
 #else
   uint32_t inbox = app_message_inbox_size_maximum();
-  uint32_t outbox = app_message_outbox_size_maximum();
+  // Only short commands go out; the memory is better spent on the cover.
+  uint32_t outbox = 1024;
 #endif
   APP_LOG(APP_LOG_LEVEL_INFO, "AppMessage open: inbox=%lu outbox=%lu",
           (unsigned long)inbox, (unsigned long)outbox);

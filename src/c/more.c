@@ -101,12 +101,14 @@ static void more_gesture(GestureKind kind, void *ctx) {
       break;
     }
     case GESTURE_SCROLL_UP:
+      // No slide: under a moving finger the slides queue up and trail behind.
       // Finger moved UP — push content up — selection advances DOWN.
-      menu_layer_set_selected_next(s_menu, false, MenuRowAlignCenter, true);
+      menu_layer_set_selected_next(s_menu, false, MenuRowAlignCenter, false);
       break;
     case GESTURE_SCROLL_DOWN:
+      // No slide: under a moving finger the slides queue up and trail behind.
       // Finger moved DOWN — pull content down — selection retreats UP.
-      menu_layer_set_selected_next(s_menu, true, MenuRowAlignCenter, true);
+      menu_layer_set_selected_next(s_menu, true, MenuRowAlignCenter, false);
       break;
     case GESTURE_SWIPE_LEFT:
       window_stack_pop(true);
