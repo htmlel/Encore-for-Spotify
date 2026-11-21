@@ -27,7 +27,7 @@ var afterSlot0 = null;      // what to do when the running slot-0 send is done
 
 // The cover size the Time 2 wants, a side in pixels: small for the card look,
 // screen-wide for the full-cover look. The watch sends it with each command.
-var emerySide = 96;
+var emerySide = 108;
 
 // True if the size changed, in which case covers already sent are forgotten.
 function setArtSize(side) {
@@ -275,8 +275,8 @@ function processJpeg(jpegData, slot) {
         : isColorPlatform() ? resizeAndQuantize(raw.data, raw.width, raw.height, W, H)
           : resizeAndDither(raw.data, raw.width, raw.height, W, H);
 
-    // Only worth it for a cover bigger than the preview itself.
-    if (slot === 0 && platform === 'emery' && W > PREVIEW_SIZE) {
+    // Only worth it for a cover a good deal bigger than the preview.
+    if (slot === 0 && platform === 'emery' && W >= PREVIEW_SIZE * 3 / 2) {
       // The preview first; the full cover follows unless a newer song cut in.
       var preview = quantizeNearest(
         resizeSmooth(raw.data, raw.width, raw.height, PREVIEW_SIZE, PREVIEW_SIZE),

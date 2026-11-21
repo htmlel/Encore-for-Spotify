@@ -14,6 +14,7 @@
 #include "comm.h"
 #include "ui_looks.h"
 #include "heart.h"
+#include "marquee.h"
 #include "mode_button.h"
 
 #if defined(PBL_PLATFORM_EMERY)
@@ -21,15 +22,15 @@
 #define SCREEN_W 200
 
 #define COVER_X 8
-#define COVER_Y 36
-#define COVER_SIZE 96       // the cover arrives as a square this size
+#define COVER_Y 34
+#define COVER_SIZE 108      // the cover arrives as a square this size
 #define COVER_RADIUS 8
 
-#define TEXT_X 112
-#define TEXT_W 84
+#define TEXT_X 124
+#define TEXT_W 70
 
-#define BUTTON_Y 141
-#define BUTTON_H 34
+#define BUTTON_Y 149
+#define BUTTON_H 28
 #define SLIDER_Y 200
 #define SLIDER_X0 62
 #define SLIDER_X1 190
@@ -42,6 +43,7 @@
 #define COLOR_DIM GColorLightGray
 
 static Layer *s_canvas;
+static MarqueeLayer *s_title_layer;   // the song name; scrolls when it is too long to fit
 
 static GBitmap *s_art;          // owned by comm.c
 static char s_title[64] = "Encore";
@@ -126,18 +128,16 @@ static void draw_top(GContext *ctx) {
                      GRect(12, 2, 70, 22), GTextOverflowModeFill, GTextAlignmentLeft, NULL);
   // The heart: green when the song is liked, a white outline when not.
   const bool liked = comm_get_liked() == 1;
-  heart_draw(ctx, GPoint(HEART_CX, HEART_CY), 13, 2, liked ? COLOR_ACCENT : GColorWhite, false,
+  heart_draw(ctx, GPoint(HEART_CX, HEART_CY), 10, 2, liked ? COLOR_ACCENT : GColorWhite, false,
              liked, COLOR_ACCENT);
 }
 
 static void draw_text(GContext *ctx) {
+  // The song name is its own scrolling layer, above this one.
   graphics_context_set_text_color(ctx, GColorWhite);
-  graphics_draw_text(ctx, s_title, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                     GRect(TEXT_X, COVER_Y - 6, TEXT_W, 42), GTextOverflowModeTrailingEllipsis,
-                     GTextAlignmentLeft, NULL);
   // The artist may take two lines; the device goes right under it.
   GFont artist_font = fonts_get_system_font(FONT_KEY_GOTHIC_18);
-  const GRect artist_box = GRect(TEXT_X, COVER_Y + 36, TEXT_W, 42);
+  const GRect artist_box = GRect(TEXT_X, COVER_Y + 20, TEXT_W, 42);
   const GSize artist_size = graphics_text_layout_get_content_size(
       s_artist, artist_font, artist_box, GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
   graphics_draw_text(ctx, s_artist, artist_font, artist_box, GTextOverflowModeTrailingEllipsis,
@@ -195,7 +195,7 @@ static void draw_mode_button(GContext *ctx) {
   const GRect pill = mode_button_rect();
   fill_pill(ctx, pill, COLOR_PILL);
   mode_button_draw(ctx, GPoint(pill.origin.x + pill.size.w / 2, pill.origin.y + pill.size.h / 2),
-                   s_shuffle, s_repeat, COLOR_ACCENT, GPoint(18, -11));
+                   s_shuffle, s_repeat, COLOR_ACCENT, GPoint(18, -11), false);
 }
 
 static void format_time(char *out, size_t size, int32_t sec, bool minus) {
@@ -289,6 +289,15 @@ void card_init(Window *window) {
   layer_set_update_proc(s_canvas, canvas_update);
   layer_add_child(root, s_canvas);
 
+  s_title_layer = marquee_layer_create(GRect(TEXT_X, COVER_Y - 4, SCREEN_W - TEXT_X - 4, 24));
+  if (s_title_layer) {
+    marquee_layer_set_font(s_title_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+    marquee_layer_set_text_color(s_title_layer, GColorWhite);
+    marquee_layer_set_alignment(s_title_layer, GTextAlignmentLeft);
+    marquee_layer_set_text(s_title_layer, s_title);
+    layer_add_child(root, marquee_layer_get_layer(s_title_layer));
+  }
+
   time_t now = time(NULL);
   set_clock(localtime(&now));
   tick_timer_service_subscribe(MINUTE_UNIT, clock_tick);
@@ -302,6 +311,10 @@ void card_deinit(void) {
   }
   s_volume_text[0] = '\0';
   mode_button_stop();
+  if (s_title_layer) {
+    marquee_layer_destroy(s_title_layer);
+    s_title_layer = NULL;
+  }
   if (s_canvas) {
     layer_destroy(s_canvas);
     s_canvas = NULL;
@@ -348,8 +361,13 @@ void card_set_status(const char *text) {
 }
 
 void card_set_track_info(const char *title, const char *artist) {
-  strncpy(s_title, title, sizeof(s_title) - 1);
-  s_title[sizeof(s_title) - 1] = '\0';
+  if (strcmp(s_title, title) != 0) {
+    strncpy(s_title, title, sizeof(s_title) - 1);
+    s_title[sizeof(s_title) - 1] = '\0';
+    if (s_title_layer) {
+      marquee_layer_set_text(s_title_layer, s_title);
+    }
+  }
   strncpy(s_artist, artist, sizeof(s_artist) - 1);
   s_artist[sizeof(s_artist) - 1] = '\0';
   redraw();

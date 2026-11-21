@@ -8,6 +8,11 @@ static int s_flip_step = -1;       // -1 when not flipping
 static AppTimer *s_flip_timer;
 static void (*s_redraw)(void);
 
+// Set while drawing: half the height of a sign, and the height of its
+// arrowheads. Smaller for the small size.
+static int s_half = 5;
+static int s_head_h = 10;
+
 static void draw_triangle(GContext *ctx, int x, int y, int w, int h, bool right) {
   GPathInfo info = {
       .num_points = 3,
@@ -26,8 +31,8 @@ static void draw_triangle(GContext *ctx, int x, int y, int w, int h, bool right)
 // by `scale` sixteenths, which is what makes the flip.
 static void draw_shuffle_sign(GContext *ctx, int cx, int cy, int scale, GColor color) {
   #define SX(dx) (cx + (dx) * scale / 16)
-  const int top = cy - 5;
-  const int bottom = cy + 5;
+  const int top = cy - s_half;
+  const int bottom = cy + s_half;
   graphics_context_set_stroke_color(ctx, color);
   graphics_context_set_stroke_width(ctx, 2);
   // Two arrows that run level, swap heights in the middle, and run level
@@ -41,16 +46,16 @@ static void draw_shuffle_sign(GContext *ctx, int cx, int cy, int scale, GColor c
   graphics_context_set_fill_color(ctx, color);
   const int head = 7 * scale / 16;
   if (head > 0) {
-    draw_triangle(ctx, SX(5), top - 5, head, 10, true);
-    draw_triangle(ctx, SX(5), bottom - 5, head, 10, true);
+    draw_triangle(ctx, SX(5), top - s_head_h / 2, head, s_head_h, true);
+    draw_triangle(ctx, SX(5), bottom - s_head_h / 2, head, s_head_h, true);
   }
   #undef SX
 }
 
 static void draw_repeat_sign(GContext *ctx, int cx, int cy, int scale, GColor color, bool one) {
   #define SX(dx) (cx + (dx) * scale / 16)
-  const int top = cy - 5;
-  const int bottom = cy + 5;
+  const int top = cy - s_half;
+  const int bottom = cy + s_half;
   graphics_context_set_stroke_color(ctx, color);
   graphics_context_set_stroke_width(ctx, 2);
   graphics_context_set_fill_color(ctx, color);
@@ -69,7 +74,7 @@ static void draw_repeat_sign(GContext *ctx, int cx, int cy, int scale, GColor co
     graphics_draw_line(ctx, GPoint(SX(9), bottom), GPoint(SX(4), bottom));
     graphics_draw_line(ctx, GPoint(SX(-9), bottom), GPoint(SX(-3), bottom));
     if (head > 0) {
-      draw_triangle(ctx, SX(3) - head, bottom - 5, head, 10, false);
+      draw_triangle(ctx, SX(3) - head, bottom - s_head_h / 2, head, s_head_h, false);
     }
     if (scale >= 12) {
       graphics_draw_line(ctx, GPoint(cx, top - 4), GPoint(cx, top + 4));
@@ -87,15 +92,15 @@ static void draw_repeat_sign(GContext *ctx, int cx, int cy, int scale, GColor co
     graphics_draw_line(ctx, GPoint(SX(11), bottom - 2), GPoint(SX(9), bottom));
     graphics_draw_line(ctx, GPoint(SX(9), bottom), GPoint(SX(-5), bottom));
     if (head > 0) {
-      draw_triangle(ctx, SX(5), top - 5, head, 10, true);
-      draw_triangle(ctx, SX(-5) - head, bottom - 5, head, 10, false);
+      draw_triangle(ctx, SX(5), top - s_head_h / 2, head, s_head_h, true);
+      draw_triangle(ctx, SX(-5) - head, bottom - s_head_h / 2, head, s_head_h, false);
     }
   }
   #undef SX
 }
 
 void mode_button_draw(GContext *ctx, GPoint center, bool shuffle, int repeat, GColor on,
-                      GPoint dot) {
+                      GPoint dot, bool small) {
   // During a flip: full width at the ends, nothing in the middle, and the
   // other face from the halfway step on.
   int scale = 16;
@@ -110,6 +115,12 @@ void mode_button_draw(GContext *ctx, GPoint center, bool shuffle, int repeat, GC
   if (scale <= 0) {
     return;
   }
+  // The small size is three quarters as wide and a little less tall.
+  if (small) {
+    scale = scale * 12 / 16;
+  }
+  s_half = small ? 4 : 5;
+  s_head_h = small ? 8 : 10;
   if (repeat_face) {
     draw_repeat_sign(ctx, center.x, center.y, scale, repeat ? on : GColorWhite, repeat == 2);
   } else {

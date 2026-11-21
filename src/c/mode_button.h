@@ -8,9 +8,9 @@
 // Draws the sign that is face up, centered on `center`: `on` colored when
 // that mode is switched on, white when not. A dot in the `on` color, at
 // `dot` from the center, shows when the mode that is face down is on, so
-// neither is ever on out of sight.
+// neither is ever on out of sight. `small` draws it three quarters the size.
 void mode_button_draw(GContext *ctx, GPoint center, bool shuffle, int repeat, GColor on,
-                      GPoint dot);
+                      GPoint dot, bool small);
 
 // True while the repeat face is up.
 bool mode_button_is_repeat(void);

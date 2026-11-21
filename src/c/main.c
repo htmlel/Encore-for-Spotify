@@ -72,7 +72,7 @@ void now_playing_look_toggle(void) {
 
 int now_playing_art_side(void) {
 #if defined(PBL_PLATFORM_EMERY)
-  return s_np_look == NP_LOOK_COVER ? 200 : 96;
+  return s_np_look == NP_LOOK_COVER ? 200 : 108;
 #else
   return 0;  // other watches keep the size the phone picks for them
 #endif

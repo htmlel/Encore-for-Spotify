@@ -331,17 +331,19 @@ static void draw_heart(GContext *ctx) {
   heart_draw(ctx, GPoint(HEART_CX, HEART_CY), 10, 2, GColorWhite, false, liked, GColorRed);
 }
 
-// The shuffle/repeat button, opposite the heart: green when on. Holding it
+// The shuffle/repeat button, opposite the heart and the same size: green
+// when on. Holding it
 // flips it between the two.
 static void draw_mode(GContext *ctx) {
-  mode_button_draw(ctx, GPoint(MODE_CX, HEART_CY), s_shuffle, s_repeat, GColorGreen, GPoint(11, -10));
+  mode_button_draw(ctx, GPoint(MODE_CX, HEART_CY), s_shuffle, s_repeat, GColorJaegerGreen,
+                   GPoint(10, -9), true);
 }
 
 // The time, in the middle along the top.
 static void draw_bar(GContext *ctx) {
   graphics_context_set_text_color(ctx, (GColor){.argb = INK_WHITE});
   graphics_draw_text(ctx, s_clock, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                     GRect(60, -5, 80, 22), GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+                     GRect(60, -3, 80, 22), GTextOverflowModeFill, GTextAlignmentCenter, NULL);
 }
 
 static void format_time(char *out, size_t size, int32_t sec, bool minus) {
