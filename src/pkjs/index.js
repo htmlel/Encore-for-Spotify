@@ -467,7 +467,9 @@ function resolveToTrackUri(uri, cb) {
   if (kind === 'playlist') {
     api.getPlaylistFirstTrack(id, function(err, data) {
       if (err) return cb(err);
-      var t = data && data.items && data.items[0] && data.items[0].track;
+      // The entry is called `item` in the newer answer and `track` in the older.
+      var first = data && data.items && data.items[0];
+      var t = first && (first.item || first.track);
       cb(null, t ? t.uri : null);
     });
   } else if (kind === 'album') {

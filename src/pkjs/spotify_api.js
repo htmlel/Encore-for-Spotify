@@ -184,8 +184,13 @@ module.exports = {
     apiRequest('PUT', '/me/player/repeat?state=' + state, cb);
   },
 
+  // Spotify renamed a playlist's /tracks to /items; the old name is tried
+  // for apps that still have it.
   getPlaylistFirstTrack: function(id, cb) {
-    apiRequest('GET', '/playlists/' + id + '/tracks?limit=1&fields=items(track(uri))', cb);
+    apiRequest('GET', '/playlists/' + id + '/items?limit=1', function(err, data) {
+      if (!err) return cb(null, data);
+      apiRequest('GET', '/playlists/' + id + '/tracks?limit=1', cb);
+    });
   },
 
   getAlbumFirstTrack: function(id, cb) {
@@ -223,7 +228,20 @@ module.exports = {
                encodeURIComponent(query), cb);
   },
 
+  // An artist's top tracks are gone from Spotify's API for new apps, so the
+  // first song of the artist's newest album stands in. Answers in the same
+  // shape as the old call: { tracks: [ { uri } ] }.
   getArtistTopTrack: function(id, cb) {
-    apiRequest('GET', '/artists/' + id + '/top-tracks?market=from_token', cb);
+    apiRequest('GET', '/artists/' + id + '/top-tracks?market=from_token', function(err, data) {
+      if (!err && data && data.tracks && data.tracks.length) return cb(null, data);
+      apiRequest('GET', '/artists/' + id + '/albums?limit=1', function(err2, albums) {
+        var album = !err2 && albums && albums.items && albums.items[0];
+        if (!album) return cb(err2 || err || new Error('no albums'));
+        apiRequest('GET', '/albums/' + album.id + '/tracks?limit=1', function(err3, tracks) {
+          if (err3) return cb(err3);
+          cb(null, { tracks: (tracks && tracks.items) || [] });
+        });
+      });
+    });
   }
 };

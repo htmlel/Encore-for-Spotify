@@ -455,9 +455,11 @@ static void init(void) {
 #if !defined(PBL_PLATFORM_APLITE)
   // Tutorial is dropped on aplite to free heap (24 KB app slot).
   // Aplite users see the menu directly on first launch.
+#if !defined(DEMO_MENU)
   if (tutorial_needed()) {
     tutorial_show(tutorial_done);
   }
+#endif
 #endif
 }
 
@@ -515,7 +517,8 @@ static void demo_now_playing(void) {
   ui_set_album_art(s_demo_art);
   // On the full-cover look the controls only stay up while paused.
   const bool cover_look = now_playing_look_get() == NP_LOOK_COVER;
-  track_info_cb("Golden Hour Drive", "The Night Owls", 215, 83,
+  // A name short enough to sit still on the card, where long ones scroll.
+  track_info_cb(cover_look ? "Golden Hour Drive" : "Low Tide", "The Night Owls", 215, 83,
                 DEMO_NP != 2 && !(cover_look && DEMO_NP == 4), DEMO_NP == 3 || DEMO_NP == 4,
                 DEMO_NP == 4 ? 1 : DEMO_NP == 5 ? 2 : 0);
   if (DEMO_NP == 4 || DEMO_NP == 5) {

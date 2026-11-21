@@ -37,10 +37,10 @@ static const char *s_bodies[] = {
 #else
 static const char *s_titles[] = {
   "Welcome!",
-  "Now Playing",
-  "Hold UP/DOWN",
+  "Buttons",
+  "Touch",
   "Shuffle/Repeat",
-  "Add to Queue"
+  "More"
 };
 
 static const char *s_bodies[] = {
@@ -53,22 +53,27 @@ static const char *s_bodies[] = {
   "UP = Previous track\n"
   "DOWN = Next track\n"
   "SELECT = View Queue\n\n"
-  "SELECT (in Queue) =\n"
-  "Play/Pause track",
+  "Hold UP/DOWN =\n"
+  "skip 15 seconds",
 
-  "Hold UP = back 15s\n"
-  "Hold DOWN = +15s\n\n"
-  "Switch to volume\n"
-  "in About menu.",
+  "Tap the buttons\n"
+  "on the screen.\n"
+  "Tap the cover to\n"
+  "play or pause.\n"
+  "Tap the heart to\n"
+  "like a song.",
+
+  "Tap the shuffle\n"
+  "button to turn\n"
+  "shuffle on. Hold\n"
+  "it to flip it\n"
+  "over to repeat.",
 
   "Hold SELECT on\n"
-  "'Now Playing' to\n"
-  "toggle Shuffle &\n"
-  "Repeat mode.",
-
-  "Hold SELECT on\n"
-  "a 'Liked Song'\n"
-  "to queue it."
+  "'Now Playing' in\n"
+  "the menu to pick\n"
+  "a speaker. Pick\n"
+  "a look in About."
 };
 #endif
 

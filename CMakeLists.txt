@@ -17,6 +17,12 @@ if(DEMO_NOTICE)
   target_compile_definitions(app INTERFACE DEMO_NOTICE=1)
 endif()
 
+# -DDEMO_MENU=ON skips the tutorial, for a simulator picture of the main menu.
+option(DEMO_MENU "Skip the tutorial at launch" OFF)
+if(DEMO_MENU)
+  target_compile_definitions(app INTERFACE DEMO_MENU=1)
+endif()
+
 # -DDEMO_NP=1 opens Now Playing with a made-up song (2 = paused, 3 = shuffle on,
 # 4 = shuffle and repeat on with the button turned over to repeat,
 # 5 = repeat one song, 6 = a pale cover).
