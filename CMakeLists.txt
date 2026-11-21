@@ -35,3 +35,13 @@ endif()
 if(DEFINED DEMO_LOOK)
   target_compile_definitions(app INTERFACE DEMO_LOOK=${DEMO_LOOK})
 endif()
+
+# -DDEMO_ART_DIR=<folder> uses a real cover and song in the DEMO_NP pictures:
+# the folder holds a demo_art.h (see main.c). Name the song with
+# -DDEMO_SONG_NAME=..., -DDEMO_ARTIST_NAME=... and -DDEMO_SONG_LENGTH=<seconds>.
+if(DEFINED DEMO_ART_DIR)
+  target_include_directories(app INTERFACE ${DEMO_ART_DIR})
+  target_compile_definitions(app INTERFACE DEMO_ART=1
+    DEMO_SONG="${DEMO_SONG_NAME}" DEMO_ARTIST="${DEMO_ARTIST_NAME}"
+    DEMO_SONG_SECONDS=${DEMO_SONG_LENGTH})
+endif()

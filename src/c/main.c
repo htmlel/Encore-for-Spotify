@@ -473,6 +473,19 @@ static void deinit(void) {
 #if defined(DEMO_NP)
 static GBitmap *s_demo_art;
 
+// -DDEMO_ART_DIR=<folder> swaps the drawn cover for a real one, from a
+// demo_art.h kept outside the project (it holds DEMO_ART_200 for the
+// full-cover look or DEMO_ART_108 for the card, already in the watch's colors), and the made-up song for
+// DEMO_SONG / DEMO_ARTIST / DEMO_SONG_SECONDS.
+#if defined(DEMO_ART)
+#include "demo_art.h"
+#endif
+#if !defined(DEMO_SONG)
+#define DEMO_SONG (cover_look ? "Golden Hour Drive" : "Low Tide")
+#define DEMO_ARTIST "The Night Owls"
+#define DEMO_SONG_SECONDS 215
+#endif
+
 static void demo_now_playing(void) {
   window_stack_pop_all(false);
   // A cover drawn here: a sunset over the sea.
@@ -513,12 +526,29 @@ static void demo_now_playing(void) {
       }
     }
   }
+#if defined(DEMO_ART)
+  // The real cover is used where it sits in the app's own image, with no
+  // second copy: there is not the memory for both.
+  if (s_demo_art) {
+    gbitmap_destroy(s_demo_art);
+  }
+  s_demo_art = gbitmap_create_blank(GSize(1, 1), GBitmapFormat8Bit);
+  if (s_demo_art) {
+#if DEMO_LOOK == 1
+    gbitmap_set_data(s_demo_art, (uint8_t *)DEMO_ART_200, GBitmapFormat8Bit, 200, false);
+#else
+    gbitmap_set_data(s_demo_art, (uint8_t *)DEMO_ART_108, GBitmapFormat8Bit, 108, false);
+#endif
+    gbitmap_set_bounds(s_demo_art, GRect(0, 0, side, side));
+  }
+#endif
   now_playing_window_push();
   ui_set_album_art(s_demo_art);
   // On the full-cover look the controls only stay up while paused.
   const bool cover_look = now_playing_look_get() == NP_LOOK_COVER;
-  // A name short enough to sit still on the card, where long ones scroll.
-  track_info_cb(cover_look ? "Golden Hour Drive" : "Low Tide", "The Night Owls", 215, 83,
+  // The made-up name is short enough to sit still on the card, where long
+  // ones scroll.
+  track_info_cb(DEMO_SONG, DEMO_ARTIST, DEMO_SONG_SECONDS, 83,
                 DEMO_NP != 2 && !(cover_look && (DEMO_NP == 4 || DEMO_NP == 7)),
                 DEMO_NP == 3 || DEMO_NP == 4,
                 DEMO_NP == 4 ? 1 : DEMO_NP == 5 ? 2 : 0);

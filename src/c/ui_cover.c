@@ -146,9 +146,18 @@ static void darken_lower_half(GContext *ctx) {
     // How many of every 16 pixels to darken on this row; fewer while the
     // controls are fading in or out.
     const int full = y >= FADE_BOTTOM ? 16 : (y - FADE_TOP) * 16 / (FADE_BOTTOM - FADE_TOP);
-    const int level = full * s_controls / 16;
+    // At most 12 of every 16 go black, in a regular pattern: the cover is
+    // still there underneath, at a quarter of its brightness. (Halving each
+    // pixel's color would flatten a cover made of fine dots into blobs.)
+    // The pixels left are dimmed a step as well, so small white text still
+    // reads over a white part of the cover.
+    const int strength = full * s_controls / 16;
+    const int level = strength * 12 / 16;
     for (int x = row.min_x; x <= row.max_x; x++) {
-      if (BAYER4[y & 3][x & 3] < level) {
+      const int at = BAYER4[y & 3][x & 3];
+      if (at < level) {
+        row.data[x] = GColorBlackARGB8;
+      } else if (strength >= 16 || BAYER4[(y + 2) & 3][(x + 1) & 3] < strength) {
         const uint8_t px = row.data[x];
         row.data[x] = 0xC0 | (((px >> 4) & 3) >> 1) << 4 | (((px >> 2) & 3) >> 1) << 2 |
                       ((px & 3) >> 1);
