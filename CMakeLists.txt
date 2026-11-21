@@ -21,6 +21,10 @@ endif()
 option(DEMO_MENU "Skip the tutorial at launch" OFF)
 if(DEMO_MENU)
   target_compile_definitions(app INTERFACE DEMO_MENU=1)
+  # With -DDEMO_SONG_NAME=..., the Now Playing row names that song.
+  if(DEFINED DEMO_SONG_NAME)
+    target_compile_definitions(app INTERFACE DEMO_MENU_SONG="${DEMO_SONG_NAME}")
+  endif()
 endif()
 
 # -DDEMO_NP=1 opens Now Playing with a made-up song (2 = paused, 3 = shuffle on,

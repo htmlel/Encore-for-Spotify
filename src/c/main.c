@@ -460,6 +460,10 @@ static void init(void) {
     tutorial_show(tutorial_done);
   }
 #endif
+#if defined(DEMO_MENU_SONG)
+  // For a simulator picture: the menu as it looks with a song playing.
+  menu_set_now_playing_subtitle(DEMO_MENU_SONG);
+#endif
 #endif
 }
 
